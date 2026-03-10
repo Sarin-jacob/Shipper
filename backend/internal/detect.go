@@ -9,7 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// BuildTarget represents what the UI will ask the user to confirm
+// BuildTarget represents the detected build configuration
 type BuildTarget struct {
 	Type        string `json:"type"` // "compose" or "dockerfile"
 	File        string `json:"file"`
@@ -25,6 +25,7 @@ type ComposeSchema struct {
 	} `yaml:"services"`
 }
 
+// AnalyzeRepo searches a directory for build configurations based on priority
 func AnalyzeRepo(repoPath string) (*BuildTarget, error) {
 	composeFiles := []string{"docker-compose.yml", "compose.yml", "docker-compose.yaml"}
 
@@ -47,9 +48,10 @@ func AnalyzeRepo(repoPath string) (*BuildTarget, error) {
 		}, nil
 	}
 
-	return nil, fmt.Errorf("no valid build configuration found (checked compose and Dockerfile)")
+	return nil, fmt.Errorf("no valid build configuration found")
 }
 
+// parseCompose extracts build context and dockerfile from a compose service
 func parseCompose(fullPath, fileName string) (*BuildTarget, error) {
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
@@ -72,7 +74,7 @@ func parseCompose(fullPath, fileName string) (*BuildTarget, error) {
 			File:        fileName,
 			ServiceName: serviceName,
 			Context:     ".",
-			Dockerfile:  "Dockerfile",
+			Dockerfile:  "Dockerfile", // Default
 		}
 
 		// Handle string build context: `build: .`
@@ -81,10 +83,7 @@ func parseCompose(fullPath, fileName string) (*BuildTarget, error) {
 			return target, nil
 		}
 
-		// Handle object build context: 
-		// build:
-		//   context: .
-		//   dockerfile: custom.Dockerfile
+		// Handle object build context
 		if service.Build.Kind == yaml.MappingNode {
 			var buildObj struct {
 				Context    string `yaml:"context"`

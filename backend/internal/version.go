@@ -1,3 +1,4 @@
+// backend/internal/version.go
 package internal
 
 import (
@@ -25,15 +26,20 @@ func IncrementPatch(currentVersion string) (string, error) {
 	return fmt.Sprintf("%s.%s.%d", parts[0], parts[1], patch+1), nil
 }
 
-// GenerateTags creates the array of tags to push (version, commit, latest, plus custom)
+// GenerateTags creates the array of tags to push
 func GenerateTags(imageName, version, commitHash string, customTags []string) []string {
+	// Shorten commit hash to 7 characters
+	shortCommit := commitHash
+	if len(commitHash) > 7 {
+		shortCommit = commitHash[:7]
+	}
+
 	tags := []string{
 		fmt.Sprintf("%s:%s", imageName, version),
-		fmt.Sprintf("%s:commit-%s", imageName, commitHash[:7]), // short commit
+		fmt.Sprintf("%s:commit-%s", imageName, shortCommit),
 		fmt.Sprintf("%s:latest", imageName),
 	}
 
-	// Add any custom tags (e.g., stable, prod)
 	for _, ct := range customTags {
 		tags = append(tags, fmt.Sprintf("%s:%s", imageName, ct))
 	}

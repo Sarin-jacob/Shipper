@@ -1,3 +1,4 @@
+// backend/internal/build.go
 package internal
 
 import (
@@ -5,28 +6,33 @@ import (
 	"os/exec"
 )
 
-// RunBuildx executes the Docker buildx command in the cloned directory
-func RunBuildx(workDir string, dockerfile string, context string, tags []string, push bool) (string, error) {
-	args := []string{"buildx", "build", "-f", dockerfile}
+// RunBuildx executes the Docker buildx command in the specified directory
+func RunBuildx(workDir, dockerfile, context string, tags []string, push bool) (string, error) {
+	args := []string{"buildx", "build"}
 
-	// Append all tags
+	// Specify the Dockerfile relative to the context
+	if dockerfile != "" && dockerfile != "Dockerfile" {
+		args = append(args, "-f", dockerfile)
+	}
+
 	for _, tag := range tags {
 		args = append(args, "-t", tag)
 	}
 
-	// Add push flag if we are pushing to oci.jell0.online
 	if push {
 		args = append(args, "--push")
 	}
 
-	// Append the build context (usually ".")
+	// Append the build context
+	if context == "" {
+		context = "."
+	}
 	args = append(args, context)
 
 	cmd := exec.Command("docker", args...)
-	cmd.Dir = workDir // Execute inside the cloned repo
+	cmd.Dir = workDir
 
-	// In a real scenario, we'd pipe this to a file or websocket for real-time logs (Section 10).
-	// For now, we capture CombinedOutput.
+	// Capture CombinedOutput for the logs
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return string(output), fmt.Errorf("build failed: %v", err)

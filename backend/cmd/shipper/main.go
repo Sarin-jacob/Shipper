@@ -7,26 +7,36 @@ import (
 	"os"
 
 	"github.com/Sarin-jacob/Shipper/internal"
-	"github.com/Sarin-jacob/Shipper/internal"
 )
 
 func main() {
-	log.Println("Starting Shiper...")
+	log.Println("Starting Shiper CI/CD Engine...")
 
-	os.MkdirAll("./data", os.ModePerm)
+	// 1. Load configuration
+	cfg := internal.LoadConfig()
 
-	database, err := internal.InitDB("./data/shipper.db")
+	// 2. Ensure data directories exist
+	os.MkdirAll(cfg.DataDir, os.ModePerm)
+	os.MkdirAll(cfg.DataDir+"/logs", os.ModePerm)
+
+	// 3. Initialize Database
+	db, err := internal.InitDB(cfg.DBPath)
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
-	defer database.Close()
+	defer db.Close()
 
-	// Initialize API Server
-	server := internal.NewServer(database)
+	// 4. Start Background Scheduler
+	scheduler := internal.NewScheduler(db, cfg)
+	scheduler.Start()
+
+	// 5. Initialize API Server
+	server := internal.NewServer(db, cfg)
 	mux := server.SetupRoutes()
 
-	log.Println("API Server running on http://localhost")
-	if err := http.ListenAndServe(":80", mux); err != nil {
+	// 6. Start listening
+	log.Printf("API Server running on port %s (Registry: %s)\n", cfg.Port, cfg.RegistryURL)
+	if err := http.ListenAndServe(":"+cfg.Port, mux); err != nil {
 		log.Fatalf("Server failed: %v", err)
 	}
 }

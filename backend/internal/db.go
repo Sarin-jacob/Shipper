@@ -1,3 +1,4 @@
+// backend/internal/db.go
 package internal
 
 import (
@@ -7,6 +8,22 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// Project represents the core project entity
+type Project struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	RepoURL     string `json:"repo_url"`
+	Branch      string `json:"branch"`
+	ImageName   string `json:"image_name"`
+	ComposeFile string `json:"compose_file"`
+	ServiceName string `json:"service_name"`
+	Enabled     bool   `json:"enabled"`
+	CreatedAt   string `json:"created_at"`
+	// Joined fields for UI convenience
+	Status  string `json:"status"`
+	Version string `json:"version"`
+}
+
 // InitDB creates the connection and ensures our schema exists
 func InitDB(dbPath string) (*sql.DB, error) {
 	db, err := sql.Open("sqlite3", dbPath)
@@ -14,7 +31,6 @@ func InitDB(dbPath string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	// Ping to ensure connection is valid
 	if err = db.Ping(); err != nil {
 		return nil, err
 	}
@@ -59,11 +75,10 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	);
 	`
 
-	_, err = db.Exec(schema)
-	if err != nil {
+	if _, err = db.Exec(schema); err != nil {
 		return nil, err
 	}
 
-	log.Println("SQLite database and schema initialized.")
+	log.Println("✅ SQLite database initialized.")
 	return db, nil
 }

@@ -1,3 +1,4 @@
+// backend/internal/poller.go
 package internal
 
 import (
@@ -6,18 +7,22 @@ import (
 	"time"
 )
 
+// Scheduler manages the background polling job
 type Scheduler struct {
 	db       *sql.DB
+	cfg      Config
 	interval time.Duration
 }
 
-func NewScheduler(db *sql.DB, interval time.Duration) *Scheduler {
+func NewScheduler(db *sql.DB, cfg Config) *Scheduler {
 	return &Scheduler{
 		db:       db,
-		interval: interval,
+		cfg:      cfg,
+		interval: cfg.PollInterval,
 	}
 }
 
+// Start begins the polling loop
 func (s *Scheduler) Start() {
 	ticker := time.NewTicker(s.interval)
 	log.Printf("Scheduler started. Polling every %v", s.interval)
@@ -30,21 +35,38 @@ func (s *Scheduler) Start() {
 }
 
 func (s *Scheduler) pollProjects() {
-	// 1. Fetch all enabled projects from DB
-	// SELECT id, repo_url, branch FROM projects WHERE enabled = 1
+	rows, err := s.db.Query("SELECT id, repo_url, branch FROM projects WHERE enabled = 1")
+	if err != nil {
+		log.Printf("Polling error fetching projects: %v", err)
+		return
+	}
+	defer rows.Close()
 
-	// 2. For each project, run `git ls-remote` to get the latest commit hash on that branch
-	// We don't need to clone the whole repo just to check if there's an update!
-	// exec.Command("git", "ls-remote", repoURL, branch)
+	for rows.Next() {
+		var id int
+		var repoURL, branch string
+		if err := rows.Scan(&id, &repoURL, &branch); err != nil {
+			continue
+		}
 
-	// 3. Compare with `last_commit_built` in the `state` table
+		// Check remote commit without cloning
+		remoteCommit, err := GetRemoteCommitHash(repoURL, branch)
+		if err != nil {
+			log.Printf("[Project %d] Failed to check remote commit: %v", id, err)
+			continue
+		}
 
-	// 4. If different -> Trigger the Build Pipeline!
-	//   - Update status to "building"
-	//   - Clone
-	//   - RunBuildx
-	//   - Update version/commit in DB
-	//   - Save logs
-
-	log.Println("Polling cycle complete...")
+		// Compare with state
+		var lastCommit string
+		err = s.db.QueryRow("SELECT last_commit_built FROM state WHERE project_id = ?", id).Scan(&lastCommit)
+		
+		if err == sql.ErrNoRows || remoteCommit != lastCommit {
+			log.Printf("[Project %d] Update detected! Triggering build.", id)
+			go func(projectID int) {
+				if err := ExecuteBuild(s.db, s.cfg, projectID); err != nil {
+					log.Printf("[Project %d] Automated build failed: %v", projectID, err)
+				}
+			}(id)
+		}
+	}
 }

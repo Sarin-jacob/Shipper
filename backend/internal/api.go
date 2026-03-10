@@ -4,22 +4,28 @@ package internal
 import (
 	"database/sql"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
-	"io"
 	"os"
 	"strconv"
 )
 
+// Server holds the database connection and configuration
 type Server struct {
-	db *sql.DB
+	db  *sql.DB
+	cfg Config
 }
 
-func NewServer(db *sql.DB) *Server {
-	return &Server{db: db}
+// NewServer initializes a new API server instance
+func NewServer(db *sql.DB, cfg Config) *Server {
+	return &Server{
+		db:  db,
+		cfg: cfg,
+	}
 }
 
-// SetupRoutes registers our API endpoints (Requires Go 1.22+ for method routing)
+// SetupRoutes registers the API endpoints (Requires Go 1.22+ for method routing)
 func (s *Server) SetupRoutes() *http.ServeMux {
 	mux := http.NewServeMux()
 
@@ -27,7 +33,7 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	mux.HandleFunc("GET /api/projects", s.handleGetProjects)
 	mux.HandleFunc("POST /api/projects", s.handleAddProject)
 
-	// Build Pipeline
+	// Build Pipeline Operations
 	mux.HandleFunc("POST /api/projects/{id}/build", s.handleTriggerBuild)
 	mux.HandleFunc("GET /api/projects/{id}/builds", s.handleGetBuilds)
 	mux.HandleFunc("GET /api/builds/{id}/logs", s.handleGetLogs)
@@ -35,19 +41,18 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	return mux
 }
 
-// Project represents the data sent to the UI
-type Project struct {
-	ID      int    `json:"id"`
-	Name    string `json:"name"`
-	RepoURL string `json:"repo_url"`
-	Branch  string `json:"branch"`
-	// We'll mock status and version for the UI until the build pipeline is ready
-	Status  string `json:"status"`
-	Version string `json:"version"`
-}
+// --- Handlers ---
 
 func (s *Server) handleGetProjects(w http.ResponseWriter, r *http.Request) {
-	rows, err := s.db.Query("SELECT id, name, repo_url, branch FROM projects")
+	// We join with the state table to get the latest version and status
+	query := `
+		SELECT p.id, p.name, p.repo_url, p.branch, 
+		       COALESCE(st.last_version, 'Unknown') as version,
+			   (SELECT status FROM builds WHERE project_id = p.id ORDER BY id DESC LIMIT 1) as status
+		FROM projects p
+		LEFT JOIN state st ON p.id = st.project_id
+	`
+	rows, err := s.db.Query(query)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -57,16 +62,17 @@ func (s *Server) handleGetProjects(w http.ResponseWriter, r *http.Request) {
 	var projects []Project
 	for rows.Next() {
 		var p Project
-		if err := rows.Scan(&p.ID, &p.Name, &p.RepoURL, &p.Branch); err != nil {
-			log.Printf("Error scanning project: %v", err)
-			continue
+		var status sql.NullString
+		if err := rows.Scan(&p.ID, &p.Name, &p.RepoURL, &p.Branch, &p.Version, &status); err == nil {
+			if status.Valid {
+				p.Status = status.String
+			} else {
+				p.Status = "pending"
+			}
+			projects = append(projects, p)
 		}
-		p.Status = "up to date" // Mocked for now
-		p.Version = "0.1.0"     // Mocked for now
-		projects = append(projects, p)
 	}
 
-	// Return empty array instead of null if no projects exist
 	if projects == nil {
 		projects = []Project{}
 	}
@@ -76,16 +82,21 @@ func (s *Server) handleGetProjects(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAddProject(w http.ResponseWriter, r *http.Request) {
-	var p Project // Using the struct we defined earlier
+	var p Project
 	if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
+	// Default image name based on registry and project name if not provided
+	if p.ImageName == "" {
+		p.ImageName = s.cfg.RegistryURL + "/" + p.Name
+	}
+
 	result, err := s.db.Exec(`
-		INSERT INTO projects (name, repo_url, branch, image_name) 
-		VALUES (?, ?, ?, ?)`,
-		p.Name, p.RepoURL, p.Branch, p.Name, // Using name as default image_name for now
+		INSERT INTO projects (name, repo_url, branch, image_name, enabled) 
+		VALUES (?, ?, ?, ?, ?)`,
+		p.Name, p.RepoURL, p.Branch, p.ImageName, true, // Auto-enable for MVP
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -95,14 +106,11 @@ func (s *Server) handleAddProject(w http.ResponseWriter, r *http.Request) {
 	id, _ := result.LastInsertId()
 	p.ID = int(id)
 	
-	// Initialize empty state
 	s.db.Exec("INSERT INTO state (project_id, last_version, last_commit_built) VALUES (?, '', '')", id)
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(p)
 }
-
-// --- Build Pipeline ---
 
 func (s *Server) handleTriggerBuild(w http.ResponseWriter, r *http.Request) {
 	idStr := r.PathValue("id")
@@ -112,12 +120,9 @@ func (s *Server) handleTriggerBuild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Run the build in a goroutine so the HTTP request doesn't hang 
-	// while Docker is compiling the image.
 	go func() {
-		err := ExecuteBuild(s.db, projectID)
-		if err != nil {
-			log.Printf("Background build failed for project %d: %v", projectID, err)
+		if err := ExecuteBuild(s.db, s.cfg, projectID); err != nil {
+			log.Printf("Manual build failed for project %d: %v", projectID, err)
 		}
 	}()
 
@@ -167,18 +172,13 @@ func (s *Server) handleGetLogs(w http.ResponseWriter, r *http.Request) {
 	var logsPath string
 	err := s.db.QueryRow("SELECT logs_path FROM builds WHERE id = ?", buildID).Scan(&logsPath)
 	if err != nil {
-		http.Error(w, "Build logs not found in database", http.StatusNotFound)
-		return
-	}
-
-	if logsPath == "" {
-		http.Error(w, "Logs not yet available", http.StatusNotFound)
+		http.Error(w, "Build logs not found", http.StatusNotFound)
 		return
 	}
 
 	file, err := os.Open(logsPath)
 	if err != nil {
-		http.Error(w, "Could not read log file from disk", http.StatusInternalServerError)
+		http.Error(w, "Could not read log file", http.StatusInternalServerError)
 		return
 	}
 	defer file.Close()

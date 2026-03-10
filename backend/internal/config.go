@@ -1,3 +1,4 @@
+// backend/internal/config.go
 package internal
 
 import (
@@ -5,6 +6,7 @@ import (
 	"time"
 )
 
+// Config holds all application settings
 type Config struct {
 	Port         string
 	DBPath       string
@@ -13,6 +15,7 @@ type Config struct {
 	DataDir      string
 }
 
+// LoadConfig parses environment variables and returns a populated Config
 func LoadConfig() Config {
 	return Config{
 		Port:         getEnv("SHIPER_PORT", "8080"),
@@ -23,6 +26,7 @@ func LoadConfig() Config {
 	}
 }
 
+// getEnv fetches a string from env or returns the fallback
 func getEnv(key, fallback string) string {
 	if value, exists := os.LookupEnv(key); exists {
 		return value
@@ -30,6 +34,7 @@ func getEnv(key, fallback string) string {
 	return fallback
 }
 
+// getEnvDuration parses a duration from env or returns the fallback
 func getEnvDuration(key string, fallback time.Duration) time.Duration {
 	if value, exists := os.LookupEnv(key); exists {
 		d, err := time.ParseDuration(value)
