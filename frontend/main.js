@@ -35,6 +35,16 @@ const dom = {
 
     buildControls: document.getElementById('build-controls'),
     newBuildTag: document.getElementById('new-build-tag'),
+
+    btnGlobalSettings: document.getElementById('btn-global-settings'),
+    globalSettingsModal: document.getElementById('global-settings-modal'),
+    pushTargetRegistry: document.getElementById('push-target-registry'),
+    gs: {
+        poll: document.getElementById('gs-poll'),
+        retention: document.getElementById('gs-retention'),
+        token: document.getElementById('gs-token'),
+        registries: document.getElementById('gs-registries')
+    }
 };
 
 // State
@@ -54,7 +64,8 @@ function bindEvents() {
     dom.btnOpenModal.addEventListener('click', openModal);
     dom.btnCloseModal.addEventListener('click', closeModal);
     dom.btnCancelModal.addEventListener('click', closeModal);
-    
+    dom.btnGlobalSettings.addEventListener('click', openGlobalSettings);
+
     // Form submission
     dom.form.addEventListener('submit', handleAddProject);
     
@@ -82,7 +93,7 @@ function startPolling() {
     if (isPolling) return;
     isPolling = true;
     // Poll every 3 seconds to update statuses
-    setInterval(fetchProjects, 3000);
+    setInterval(fetchProjects, 5000);
 }
 
 // --- UI Actions ---
@@ -101,6 +112,7 @@ window.closeModals = () => {
     if(dom.backdrop) dom.backdrop.classList.add('hidden');
     if(dom.buildsModal) dom.buildsModal.classList.add('hidden');
     if(dom.settingsModal) dom.settingsModal.classList.add('hidden');
+    if(dom.globalSettingsModal) dom.globalSettingsModal.classList.add('hidden');
     currentProjectId = null;
     currentBuildId = null;
 };
@@ -111,14 +123,21 @@ async function fetchGlobalSettings() {
         if (!res.ok) return;
         const settings = await res.json();
         
-        // Populate Registry Dropdown
-        let options = `<option value="">Default (${settings.default_registry})</option>`;
+        // Populate Registry Dropdowns (for Add Project and Cross-Push)
+        let options = '';
         if (settings.registries && settings.registries.length > 0) {
-            settings.registries.forEach(reg => {
-                options += `<option value="${reg}">${reg}</option>`;
-            });
+            options = settings.registries.map(reg => `<option value="${reg}">${reg}</option>`).join('');
+            dom.gs.registries.value = settings.registries.join(', ');
         }
-        dom.inputs.registry.innerHTML = options;
+        
+        if(dom.inputs.registry) dom.inputs.registry.innerHTML = `<option value="">Default Registry</option>` + options;
+        if(dom.pushTargetRegistry) dom.pushTargetRegistry.innerHTML = options;
+
+        // Populate Global Settings Form
+        dom.gs.poll.value = settings.poll_interval || '1h';
+        dom.gs.retention.value = settings.retention_policy || 'one_per_minor';
+        dom.gs.token.value = settings.gh_token === '********' ? '********' : '';
+
     } catch (e) {
         console.error("Failed to load settings", e);
     }
@@ -136,6 +155,60 @@ function openSettingsModal(projectId) {
     dom.backdrop.classList.remove('hidden');
     dom.settingsModal.classList.remove('hidden');
 }
+
+function openGlobalSettings() {
+    fetchGlobalSettings(); // Refresh before opening
+    dom.backdrop.classList.remove('hidden');
+    dom.globalSettingsModal.classList.remove('hidden');
+}
+
+window.saveGlobalSettings = async () => {
+    const payload = {
+        poll_interval: dom.gs.poll.value,
+        retention_policy: dom.gs.retention.value,
+        gh_token: dom.gs.token.value,
+        registries: dom.gs.registries.value.split(',').map(s => s.trim()).filter(Boolean)
+    };
+
+    try {
+        await fetch(`${API_BASE}/settings`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        closeModals();
+        fetchGlobalSettings(); // Refresh dropdowns!
+    } catch (e) {
+        alert("Failed to save global settings: " + e.message);
+    }
+};
+
+// --- Cross-Registry Push ---
+
+window.pushBuild = async () => {
+    const targetRegistry = dom.pushTargetRegistry.value;
+    if (!targetRegistry) return alert("Select a target registry first.");
+
+    const btn = document.querySelector('button[onclick="pushBuild()"]');
+    btn.textContent = "Pushing...";
+    btn.disabled = true;
+
+    try {
+        const res = await fetch(`${API_BASE}/builds/${currentBuildId}/push`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ registry: targetRegistry })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        
+        alert(`Successfully pushed build to ${targetRegistry}!`);
+    } catch (e) {
+        alert("Push failed: " + e.message);
+    } finally {
+        btn.textContent = "Push";
+        btn.disabled = false;
+    }
+};
 
 window.saveProjectSettings = async () => {
     const tags = dom.editTags.value;

@@ -13,9 +13,10 @@
         <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
         <h1 class="text-xl font-bold tracking-tight text-white">Shipper</h1>
       </div>
-      <button id="btn-open-modal" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm">
-        + Add Project
-      </button>
+      <div class="flex gap-3">
+        <button id="btn-open-modal" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">+ Add Project</button>
+        <button id="btn-global-settings" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors">Settings</button>
+      </div>
     </header>
 
     <main class="flex-1 overflow-auto p-6">
@@ -65,6 +66,8 @@
       </div>
     </div>
 
+    <div id="modal-backdrop" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden z-40 transition-opacity"></div>
+
     <div id="builds-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
       <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-5xl border border-gray-700 flex flex-col max-h-[90vh]">
         <div class="px-6 py-4 border-b border-gray-700 flex justify-between items-center">
@@ -78,9 +81,15 @@
             <div class="flex justify-between items-center mb-3">
               <h3 class="text-sm font-medium text-gray-300">Build Logs</h3>
               
-              <div id="build-controls" class="hidden flex gap-2 items-center">
-                <input type="text" id="new-build-tag" placeholder="Add tag (e.g. prod)" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-32">
-                <button onclick="addBuildTag()" class="bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white px-2 py-1 rounded text-xs border border-blue-600/50 transition">Tag Image</button>
+              <div id="build-controls" class="hidden flex flex-wrap gap-2 items-center justify-end">
+                <div class="flex gap-1 border-r border-gray-700 pr-2">
+                  <input type="text" id="new-build-tag" placeholder="Add tag (e.g. prod)" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-28">
+                  <button onclick="addBuildTag()" class="bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white px-2 py-1 rounded text-xs border border-blue-600/50 transition">Tag</button>
+                </div>
+                <div class="flex gap-1 border-r border-gray-700 pr-2">
+                  <select id="push-target-registry" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-32"></select>
+                  <button onclick="pushBuild()" class="bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white px-2 py-1 rounded text-xs border border-purple-600/50 transition">Push</button>
+                </div>
                 <button id="btn-delete-build" class="text-xs bg-red-900/50 text-red-400 hover:bg-red-900 px-2 py-1 rounded transition border border-red-900">Delete</button>
               </div>
 
@@ -104,8 +113,8 @@
             <h3 class="text-sm font-medium text-gray-300 mb-2">Version Control</h3>
             <p class="text-xs text-gray-500 mb-3">Schedule a version jump for the next automated or manual build.</p>
             <div class="flex gap-2">
-              <button onclick="bumpVersion('minor')" class="flex-1 bg-gray-800 hover:bg-blue-600 hover:text-white text-gray-300 px-3 py-2 rounded text-sm transition border border-gray-600">Bump Minor (0.X.0)</button>
-              <button onclick="bumpVersion('major')" class="flex-1 bg-gray-800 hover:bg-purple-600 hover:text-white text-gray-300 px-3 py-2 rounded text-sm transition border border-gray-600">Bump Major (X.0.0)</button>
+              <button onclick="bumpVersion('minor')" class="flex-1 bg-gray-800 hover:bg-blue-600 hover:text-white text-gray-300 px-3 py-2 rounded text-sm transition border border-gray-600">Bump Minor</button>
+              <button onclick="bumpVersion('major')" class="flex-1 bg-gray-800 hover:bg-purple-600 hover:text-white text-gray-300 px-3 py-2 rounded text-sm transition border border-gray-600">Bump Major</button>
             </div>
             <div id="bump-status" class="text-xs text-green-400 mt-2 hidden">Bump scheduled for next build!</div>
           </div>
@@ -118,6 +127,39 @@
           <div class="pt-4 flex justify-between border-t border-gray-700 mt-6">
             <button onclick="deleteProject()" class="text-red-400 hover:text-red-300 text-sm font-medium">Delete Project</button>
             <button onclick="saveProjectSettings()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm transition-colors">Save Changes</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="global-settings-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+      <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-md border border-gray-700">
+        <div class="px-6 py-4 border-b border-gray-700 flex justify-between items-center">
+          <h2 class="text-lg font-semibold text-white">Global Shipper Settings</h2>
+          <button onclick="closeModals()" class="text-gray-400 hover:text-white transition">&times;</button>
+        </div>
+        <div class="p-6 space-y-4">
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Polling Interval (e.g. 30m, 1h)</label>
+            <input type="text" id="gs-poll" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm">
+          </div>
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Retention Policy</label>
+            <select id="gs-retention" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm">
+              <option value="one_per_minor">Keep 1 per Minor + Latest</option>
+              <option value="all">Keep All Builds (No Deletion)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">GitHub PAT Token (For private repos)</label>
+            <input type="password" id="gs-token" placeholder="Leave empty to keep existing" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm">
+          </div>
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Available Registries (Comma separated)</label>
+            <input type="text" id="gs-registries" placeholder="docker.io/myuser, ghcr.io/myuser" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm">
+          </div>
+          <div class="pt-4 flex justify-end border-t border-gray-700 mt-6">
+            <button onclick="saveGlobalSettings()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm transition-colors">Save Settings</button>
           </div>
         </div>
       </div>

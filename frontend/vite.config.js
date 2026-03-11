@@ -9,7 +9,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:8080',
+        target: 'https://build.jell0.online',
         changeOrigin: true,
         secure: false,
       }

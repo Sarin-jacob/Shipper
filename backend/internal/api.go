@@ -43,8 +43,10 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	mux.HandleFunc("PUT /api/projects/{id}/tags", s.handleUpdateProjectTags)
 
 	mux.HandleFunc("GET /api/settings", s.handleGetSettings)
+	mux.HandleFunc("PUT /api/settings", s.handleUpdateSettings)
 	mux.HandleFunc("POST /api/projects/{id}/bump", s.handleProjectBump)
 	mux.HandleFunc("POST /api/builds/{id}/tags", s.handleAddBuildTag)
+	mux.HandleFunc("POST /api/builds/{id}/push", s.handlePushBuild)
 
 	fileServer := http.FileServer(http.Dir(s.cfg.StaticDir))
 	mux.Handle("/", fileServer)
@@ -254,17 +256,12 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	// We read the YAML file directly to pass the registry list to the UI
 	settings := LoadSettings(s.cfg.DataDir)
 	
-	// NEVER send the GH Token to the frontend!
-	safeSettings := struct {
-		Registries   []string `json:"registries"`
-		DefaultReg   string   `json:"default_registry"`
-	}{
-		Registries: settings.Registries,
-		DefaultReg: s.cfg.RegistryURL,
+	if settings.GHToken != "" {
+		settings.GHToken = "********" 
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(safeSettings)
+	json.NewEncoder(w).Encode(settings)
 }
 
 func (s *Server) handleProjectBump(w http.ResponseWriter, r *http.Request) {
@@ -318,6 +315,60 @@ func (s *Server) handleAddBuildTag(w http.ResponseWriter, r *http.Request) {
 
 	// Log it in the DB so it shows up in the UI
 	s.db.Exec("INSERT INTO tags (build_id, tag) VALUES (?, ?)", buildID, payload.Tag)
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
+	var payload GlobalSettings
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid payload", http.StatusBadRequest)
+		return
+	}
+
+	current := LoadSettings(s.cfg.DataDir)
+	
+	// If the UI sends back the masked string or an empty string, keep the real token!
+	if payload.GHToken == "********" || payload.GHToken == "" {
+		payload.GHToken = current.GHToken
+	}
+
+	SaveSettings(s.cfg.DataDir, payload)
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handlePushBuild(w http.ResponseWriter, r *http.Request) {
+	buildID := r.PathValue("id")
+	
+	var payload struct {
+		Registry string `json:"registry"`
+	}
+	json.NewDecoder(r.Body).Decode(&payload)
+
+	if payload.Registry == "" {
+		http.Error(w, "Target registry required", http.StatusBadRequest)
+		return
+	}
+
+	var version, sourceImageName, projectName string
+	err := s.db.QueryRow(`
+		SELECT b.version, p.image_name, p.name 
+		FROM builds b JOIN projects p ON b.project_id = p.id 
+		WHERE b.id = ?`, buildID).Scan(&version, &sourceImageName, &projectName)
+	
+	if err != nil {
+		http.Error(w, "Build not found", http.StatusNotFound)
+		return
+	}
+
+	sourceImage := fmt.Sprintf("%s:%s", sourceImageName, version)
+	targetImage := fmt.Sprintf("%s/%s:%s", payload.Registry, projectName, version)
+
+	// Instantly copy the manifest across registries!
+	if err := TagExistingImage(sourceImage, targetImage); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusOK)
 }
