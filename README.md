@@ -48,7 +48,7 @@ Create a `docker-compose.yml` file:
 ```yaml
 services:
   shipper:
-    image: oci.jell0.online/shipper:latest
+    image: localhost:5000/shipper:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -69,7 +69,7 @@ services:
       - registry
 
   registry:
-    image: registry:2
+    image: registry:3
     container_name: shipper_registry
     restart: unless-stopped
     ports:
@@ -97,7 +97,7 @@ Shipper is highly configurable via environment variables:
 | Variable | Default | Description |
 | --- | --- | --- |
 | `SHIPPER_PORT` | `8080` | Port the API and UI run on. |
-| `SHIPPER_REGISTRY` | `oci.jell0.online` | The URL of your private registry. |
+| `SHIPPER_REGISTRY` | `localhost:5000` | The URL of your private registry. |
 | `SHIPPER_POLL_INTERVAL` | `1h` | How often to check Git for new commits. |
 | `SHIPPER_DATA_DIR` | `./data` | Where SQLite DB and text logs are stored. |
 | `SHIPPER_STATIC_DIR` | `./static` | Path to the compiled frontend UI files. |
@@ -122,11 +122,11 @@ https://<YOUR_TOKEN>@github.com/username/repo.git
 
 Open the **Settings** modal for any project to assign custom tags. If you add `stable, prod`, the next build will automatically push:
 
-* `oci.jell0.online/app:0.1.2`
-* `oci.jell0.online/app:commit-a1b2c3`
-* `oci.jell0.online/app:latest`
-* `oci.jell0.online/app:stable`
-* `oci.jell0.online/app:prod`
+* `localhost:5000/app:0.1.2`
+* `localhost:5000/app:commit-a1b2c3`
+* `localhost:5000/app:latest`
+* `localhost:5000/app:stable`
+* `localhost:5000/app:prod`
 
 ### Viewing Logs
 

@@ -25,7 +25,7 @@ services:
     
 
   registry:
-    image: registry:2
+    image: registry:3
     container_name: shipper_registry
     restart: unless-stopped
     ports:
