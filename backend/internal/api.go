@@ -38,6 +38,9 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	mux.HandleFunc("GET /api/projects/{id}/builds", s.handleGetBuilds)
 	mux.HandleFunc("GET /api/builds/{id}/logs", s.handleGetLogs)
 
+	fileServer := http.FileServer(http.Dir(s.cfg.StaticDir))
+	mux.Handle("/", fileServer)
+
 	return mux
 }
 

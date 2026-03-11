@@ -13,6 +13,7 @@ type Config struct {
 	RegistryURL  string
 	PollInterval time.Duration
 	DataDir      string
+	StaticDir    string
 }
 
 // LoadConfig parses environment variables and returns a populated Config
@@ -23,6 +24,7 @@ func LoadConfig() Config {
 		RegistryURL:  getEnv("SHIPER_REGISTRY", "oci.jell0.online"),
 		PollInterval: getEnvDuration("SHIPER_POLL_INTERVAL", 1*time.Hour),
 		DataDir:      getEnv("SHIPER_DATA_DIR", "./data"),
+		StaticDir:    getEnv("SHIPER_STATIC_DIR", "./static"),
 	}
 }
 
