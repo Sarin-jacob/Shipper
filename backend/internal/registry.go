@@ -6,10 +6,14 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"database/sql"
 )
 
 // ApplyRetentionPolicy keeps 'latest' and the highest patch of each minor version
 func ApplyRetentionPolicy(registryURL, repository string, currentVersions []string) error {
+	if policy == "all" {
+		return nil
+	}
 	keepMap := make(map[string]bool)
 	keepMap["latest"] = true
 
@@ -37,8 +41,14 @@ func ApplyRetentionPolicy(registryURL, repository string, currentVersions []stri
 		if !keepMap[v] && !strings.HasPrefix(v, "commit-") {
 			fmt.Printf("Untagging old version: %s:%s\n", repository, v)
 			if err := deleteRegistryTag(registryURL, repository, v); err != nil {
-				fmt.Printf("Failed to delete tag %s: %v\n", v, err)
+				if strings.Contains(err.Error(), "404") {
+					fmt.Printf("Tag %s already missing from registry. Syncing DB.\n", v)
+				} else {
+					fmt.Printf("Failed to delete tag %s: %v\n", v, err)
+					continue
+				}
 			}
+			db.Exec("UPDATE builds SET status = 'archived' WHERE version = ? AND project_id = ?", v, projectID)
 		}
 	}
 

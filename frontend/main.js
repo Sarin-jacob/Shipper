@@ -17,6 +17,7 @@ const dom = {
         name: document.getElementById('proj-name'),
         repo: document.getElementById('proj-repo'),
         branch: document.getElementById('proj-branch'),
+        registry: document.getElementById('proj-registry'),
     },
     // Global Modals
     backdrop: document.getElementById('modal-backdrop'),
@@ -30,7 +31,10 @@ const dom = {
     // Settings Modal
     settingsModal: document.getElementById('settings-modal'),
     editProjectId: document.getElementById('edit-project-id'),
-    editTags: document.getElementById('edit-tags')
+    editTags: document.getElementById('edit-tags'),
+
+    buildControls: document.getElementById('build-controls'),
+    newBuildTag: document.getElementById('new-build-tag'),
 };
 
 // State
@@ -38,8 +42,9 @@ let isPolling = false;
 let currentProjectId;
 let currentBuildId;
 
-function init() {
+async function init() {
     bindEvents();
+    await fetchGlobalSettings();
     fetchProjects();
     startPolling();
 }
@@ -99,6 +104,25 @@ window.closeModals = () => {
     currentProjectId = null;
     currentBuildId = null;
 };
+
+async function fetchGlobalSettings() {
+    try {
+        const res = await fetch(`${API_BASE}/settings`);
+        if (!res.ok) return;
+        const settings = await res.json();
+        
+        // Populate Registry Dropdown
+        let options = `<option value="">Default (${settings.default_registry})</option>`;
+        if (settings.registries && settings.registries.length > 0) {
+            settings.registries.forEach(reg => {
+                options += `<option value="${reg}">${reg}</option>`;
+            });
+        }
+        dom.inputs.registry.innerHTML = options;
+    } catch (e) {
+        console.error("Failed to load settings", e);
+    }
+}
 
 // Settings and configuration
 function openSettingsModal(projectId) {
@@ -171,6 +195,7 @@ window.fetchLogs = async (buildId) => {
     currentBuildId = buildId;
     dom.logViewer.textContent = "Loading logs...";
     dom.btnDeleteBuild.classList.remove('hidden');
+    dom.newBuildTag.value = '';
 
     try {
         const res = await fetch(`${API_BASE}/builds/${buildId}/logs`);
@@ -179,6 +204,48 @@ window.fetchLogs = async (buildId) => {
         dom.logViewer.scrollTop = dom.logViewer.scrollHeight; 
     } catch (e) {
         dom.logViewer.textContent = "Logs not available for this build.";
+    }
+};
+
+window.addBuildTag = async () => {
+    const tag = dom.newBuildTag.value.trim();
+    if (!tag) return;
+
+    const btn = document.querySelector('button[onclick="addBuildTag()"]');
+    btn.textContent = "Tagging...";
+    btn.disabled = true;
+
+    try {
+        const res = await fetch(`${API_BASE}/builds/${currentBuildId}/tags`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tag })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        
+        alert(`Successfully pushed tag '${tag}' to the registry!`);
+        dom.newBuildTag.value = '';
+    } catch (e) {
+        alert("Failed to tag image: " + e.message);
+    } finally {
+        btn.textContent = "Tag Image";
+        btn.disabled = false;
+    }
+};
+
+window.bumpVersion = async (type) => {
+    try {
+        await fetch(`${API_BASE}/projects/${currentProjectId}/bump`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type })
+        });
+        const status = document.getElementById('bump-status');
+        status.textContent = `${type.charAt(0).toUpperCase() + type.slice(1)} bump scheduled for next build!`;
+        status.classList.remove('hidden');
+        setTimeout(() => status.classList.add('hidden'), 3000);
+    } catch (e) {
+        alert("Failed to schedule bump: " + e.message);
     }
 };
 
@@ -222,7 +289,8 @@ async function handleAddProject(e) {
     const payload = {
         name: dom.inputs.name.value,
         repo_url: dom.inputs.repo.value,
-        branch: dom.inputs.branch.value
+        branch: dom.inputs.branch.value,
+        registry_override: dom.inputs.registry.value
     };
 
     try {

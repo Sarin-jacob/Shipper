@@ -22,6 +22,7 @@ type Project struct {
 	// Joined fields for UI convenience
 	Status  string `json:"status"`
 	Version string `json:"version"`
+	RegistryOverride string `json:"registry_override"`
 }
 
 // InitDB creates the connection and ensures our schema exists
@@ -78,7 +79,10 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	if _, err = db.Exec(schema); err != nil {
 		return nil, err
 	}
+	// Auto-migrate new features
 	_, _ = db.Exec("ALTER TABLE projects ADD COLUMN custom_tags TEXT DEFAULT ''")
+	db.Exec("ALTER TABLE state ADD COLUMN next_bump TEXT DEFAULT 'patch'")
+	db.Exec("ALTER TABLE projects ADD COLUMN registry_override TEXT DEFAULT ''")
 
 	log.Println("SQLite database initialized.")
 	return db, nil

@@ -15,16 +15,22 @@ import (
 func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 	log.Printf("[Project %d] Starting build pipeline...", projectID)
 
-	var name, repoURL, branch, imageName, customTagsStr string
-	err := db.QueryRow("SELECT name, repo_url, branch, image_name, COALESCE(custom_tags, '') FROM projects WHERE id = ?", projectID).
-		Scan(&name, &repoURL, &branch, &imageName, &customTagsStr)
+	// 1. Fetch project details
+	var name, repoURL, branch, imageName, customTagsStr, registryOverride string
+	err := db.QueryRow("SELECT name, repo_url, branch, image_name, COALESCE(custom_tags, ''), COALESCE(registry_override, '') FROM projects WHERE id = ?", projectID).
+		Scan(&name, &repoURL, &branch, &imageName, &customTagsStr, &registryOverride)
 	if err != nil {
 		return fmt.Errorf("failed to fetch project: %v", err)
 	}
 
-	var currentVersion, lastCommit string
-	db.QueryRow("SELECT last_version, last_commit_built FROM state WHERE project_id = ?", projectID).
-		Scan(&currentVersion, &lastCommit)
+	// Override registry if set
+	if registryOverride != "" {
+		imageName = registryOverride + "/" + name
+	}
+
+	var currentVersion, lastCommit, nextBump string
+	db.QueryRow("SELECT last_version, last_commit_built, COALESCE(next_bump, 'patch') FROM state WHERE project_id = ?", projectID).
+		Scan(&currentVersion, &lastCommit, &nextBump)
 
 	// Create temp workspace
 	workDir, err := os.MkdirTemp("", fmt.Sprintf("shiper-build-%d-*", projectID))
@@ -55,9 +61,13 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 	}
 
 	// Calculate Version
-	newVersion, err := IncrementPatch(currentVersion)
-	if err != nil {
-		return err
+	var newVersion string
+	if nextBump == "major" {
+		newVersion, _ = BumpMajor(currentVersion)
+	} else if nextBump == "minor" {
+		newVersion, _ = BumpMinor(currentVersion)
+	} else {
+		newVersion, _ = IncrementPatch(currentVersion)
 	}
 
 	var customTags []string
@@ -83,6 +93,7 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 		status = "failed"
 	} else {
 		updateState(db, projectID, newVersion, commitHash)
+		db.Exec("UPDATE state SET next_bump = 'patch' WHERE project_id = ?", projectID) // Reset bump
 		
 		// Run retention policy asynchronously
 		go func() {

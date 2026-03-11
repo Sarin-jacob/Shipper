@@ -46,3 +46,29 @@ func GenerateTags(imageName, version, commitHash string, customTags []string) []
 
 	return tags
 }
+
+// BumpMinor: "0.1.2" -> "0.2.0"
+func BumpMinor(currentVersion string) (string, error) {
+	if currentVersion == "" {
+		return "0.1.0", nil
+	}
+	parts := strings.Split(currentVersion, ".")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("invalid version format")
+	}
+	minor, _ := strconv.Atoi(parts[1])
+	return fmt.Sprintf("%s.%d.0", parts[0], minor+1), nil
+}
+
+// BumpMajor: "0.1.2" -> "1.0.0"
+func BumpMajor(currentVersion string) (string, error) {
+	if currentVersion == "" {
+		return "1.0.0", nil
+	}
+	parts := strings.Split(currentVersion, ".")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("invalid version format")
+	}
+	major, _ := strconv.Atoi(parts[0])
+	return fmt.Sprintf("%d.0.0", major+1), nil
+}

@@ -41,6 +41,10 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	mux.HandleFunc("DELETE /api/builds/{id}", s.handleDeleteBuild)
 	mux.HandleFunc("PUT /api/projects/{id}/tags", s.handleUpdateProjectTags)
 
+	mux.HandleFunc("GET /api/settings", s.handleGetSettings)
+	mux.HandleFunc("POST /api/projects/{id}/bump", s.handleProjectBump)
+	mux.HandleFunc("POST /api/builds/{id}/tags", s.handleAddBuildTag)
+
 	fileServer := http.FileServer(http.Dir(s.cfg.StaticDir))
 	mux.Handle("/", fileServer)
 
@@ -100,9 +104,9 @@ func (s *Server) handleAddProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := s.db.Exec(`
-		INSERT INTO projects (name, repo_url, branch, image_name, enabled) 
-		VALUES (?, ?, ?, ?, ?)`,
-		p.Name, p.RepoURL, p.Branch, p.ImageName, true, // Auto-enable for MVP
+		INSERT INTO projects (name, repo_url, branch, image_name, enabled, registry_override) 
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		p.Name, p.RepoURL, p.Branch, p.ImageName, true, p.RegistryOverride, // Auto-enable for MVP
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -240,5 +244,79 @@ func (s *Server) handleUpdateProjectTags(w http.ResponseWriter, r *http.Request)
 	}
 
 	s.db.Exec("UPDATE projects SET custom_tags = ? WHERE id = ?", payload.Tags, projectID)
+	w.WriteHeader(http.StatusOK)
+}
+
+// --- Advanced Features Handlers ---
+
+func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
+	// We read the YAML file directly to pass the registry list to the UI
+	settings := LoadSettings(s.cfg.DataDir)
+	
+	// NEVER send the GH Token to the frontend!
+	safeSettings := struct {
+		Registries   []string `json:"registries"`
+		DefaultReg   string   `json:"default_registry"`
+	}{
+		Registries: settings.Registries,
+		DefaultReg: s.cfg.RegistryURL,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(safeSettings)
+}
+
+func (s *Server) handleProjectBump(w http.ResponseWriter, r *http.Request) {
+	projectID := r.PathValue("id")
+	
+	var payload struct {
+		Type string `json:"type"` // "minor" or "major"
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid payload", http.StatusBadRequest)
+		return
+	}
+
+	if payload.Type != "minor" && payload.Type != "major" {
+		http.Error(w, "Type must be minor or major", http.StatusBadRequest)
+		return
+	}
+
+	s.db.Exec("UPDATE state SET next_bump = ? WHERE project_id = ?", payload.Type, projectID)
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleAddBuildTag(w http.ResponseWriter, r *http.Request) {
+	buildID := r.PathValue("id")
+	
+	var payload struct {
+		Tag string `json:"tag"` // e.g. "stable"
+	}
+	json.NewDecoder(r.Body).Decode(&payload)
+
+	// Fetch the exact image name and version of this specific build
+	var version, imageName string
+	err := s.db.QueryRow(`
+		SELECT b.version, p.image_name 
+		FROM builds b JOIN projects p ON b.project_id = p.id 
+		WHERE b.id = ?`, buildID).Scan(&version, &imageName)
+	
+	if err != nil {
+		http.Error(w, "Build not found", http.StatusNotFound)
+		return
+	}
+
+	sourceImage := fmt.Sprintf("%s:%s", imageName, version)
+	newImageTag := fmt.Sprintf("%s:%s", imageName, payload.Tag)
+
+	// Execute remote imagetools tagging
+	if err := TagExistingImage(sourceImage, newImageTag); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// Log it in the DB so it shows up in the UI
+	s.db.Exec("INSERT INTO tags (build_id, tag) VALUES (?, ?)", buildID, payload.Tag)
+
 	w.WriteHeader(http.StatusOK)
 }

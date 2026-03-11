@@ -31,56 +31,61 @@
       </div>
     </main>
 
-    <div id="add-modal" class="hidden fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div class="bg-gray-800 border border-gray-700 rounded-xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all">
-        <div class="px-6 py-4 border-b border-gray-700 flex justify-between items-center bg-gray-800/50">
-          <h3 class="text-lg font-semibold text-white">Add New Project</h3>
-          <button id="btn-close-modal" class="text-gray-400 hover:text-white transition-colors">
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-          </button>
+    <div id="add-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+      <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-md border border-gray-700">
+        <div class="px-6 py-4 border-b border-gray-700 flex justify-between items-center">
+          <h2 class="text-lg font-semibold text-white">Add New Project</h2>
+          <button id="btn-close-modal" class="text-gray-400 hover:text-white transition">&times;</button>
         </div>
-        
         <form id="add-project-form" class="p-6 space-y-4">
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-1">Project Name</label>
-            <input type="text" id="proj-name" required placeholder="e.g., jellyfin-renamer" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors">
+            <label class="block text-sm text-gray-400 mb-1">Project Name</label>
+            <input type="text" id="proj-name" required class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" placeholder="my-awesome-app">
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-300 mb-1">Git Repository URL</label>
-            <input type="url" id="proj-repo" required placeholder="https://github.com/user/repo.git" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors">
+            <label class="block text-sm text-gray-400 mb-1">Git Repository URL</label>
+            <input type="text" id="proj-repo" required class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" placeholder="https://github.com/user/repo.git">
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-1">Branch</label>
-            <input type="text" id="proj-branch" required placeholder="main" value="main" class="w-full bg-gray-900 border border-gray-600 rounded-md px-3 py-2 text-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors">
+          <div class="flex gap-4">
+            <div class="w-1/2">
+              <label class="block text-sm text-gray-400 mb-1">Branch</label>
+              <input type="text" id="proj-branch" required value="main" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white">
+            </div>
+            <div class="w-1/2">
+              <label class="block text-sm text-gray-400 mb-1">Target Registry</label>
+              <select id="proj-registry" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm">
+                </select>
+            </div>
           </div>
-          
-          <div class="pt-4 flex justify-end space-x-3">
-            <button type="button" id="btn-cancel-modal" class="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors">Cancel</button>
-            <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 rounded-md text-sm font-medium shadow-sm transition-colors">
-              Save Project
-            </button>
+          <div class="pt-4 flex justify-end space-x-3 border-t border-gray-700 mt-6">
+            <button type="button" id="btn-cancel-modal" class="text-gray-400 hover:text-white px-4 py-2">Cancel</button>
+            <button type="submit" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-medium transition-colors">Add Project</button>
           </div>
         </form>
       </div>
     </div>
 
-    <div id="modal-backdrop" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden z-40 transition-opacity"></div>
-
     <div id="builds-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
-      <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl border border-gray-700 flex flex-col max-h-[90vh]">
+      <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-5xl border border-gray-700 flex flex-col max-h-[90vh]">
         <div class="px-6 py-4 border-b border-gray-700 flex justify-between items-center">
           <h2 class="text-lg font-semibold text-white">Build History</h2>
           <button onclick="closeModals()" class="text-gray-400 hover:text-white transition">&times; Close</button>
         </div>
-        <div class="flex-1 overflow-auto p-6 flex gap-6">
-          <div class="w-1/3 border-r border-gray-700 pr-4 overflow-y-auto" id="build-list-container">
+        <div class="flex-1 overflow-hidden flex">
+          <div class="w-1/3 border-r border-gray-700 p-4 overflow-y-auto" id="build-list-container">
             </div>
-          <div class="w-2/3 flex flex-col">
-            <div class="flex justify-between items-center mb-2">
+          <div class="w-2/3 flex flex-col p-4 bg-gray-900">
+            <div class="flex justify-between items-center mb-3">
               <h3 class="text-sm font-medium text-gray-300">Build Logs</h3>
-              <button id="btn-delete-build" class="text-xs bg-red-900/50 text-red-400 hover:bg-red-900 px-2 py-1 rounded hidden">Delete Build</button>
+              
+              <div id="build-controls" class="hidden flex gap-2 items-center">
+                <input type="text" id="new-build-tag" placeholder="Add tag (e.g. prod)" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-32">
+                <button onclick="addBuildTag()" class="bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white px-2 py-1 rounded text-xs border border-blue-600/50 transition">Tag Image</button>
+                <button id="btn-delete-build" class="text-xs bg-red-900/50 text-red-400 hover:bg-red-900 px-2 py-1 rounded transition border border-red-900">Delete</button>
+              </div>
+
             </div>
-            <pre id="log-viewer" class="bg-gray-900 text-gray-300 p-4 rounded text-xs font-mono overflow-auto flex-1 border border-gray-700">Select a build to view logs...</pre>
+            <pre id="log-viewer" class="bg-gray-950 text-gray-300 p-4 rounded text-xs font-mono overflow-auto flex-1 border border-gray-800 shadow-inner">Select a build to view logs...</pre>
           </div>
         </div>
       </div>
@@ -92,12 +97,22 @@
           <h2 class="text-lg font-semibold text-white">Project Settings</h2>
           <button onclick="closeModals()" class="text-gray-400 hover:text-white transition">&times;</button>
         </div>
-        <div class="p-6 space-y-4">
+        <div class="p-6 space-y-6">
           <input type="hidden" id="edit-project-id">
           
+          <div class="bg-gray-900 p-4 rounded border border-gray-700">
+            <h3 class="text-sm font-medium text-gray-300 mb-2">Version Control</h3>
+            <p class="text-xs text-gray-500 mb-3">Schedule a version jump for the next automated or manual build.</p>
+            <div class="flex gap-2">
+              <button onclick="bumpVersion('minor')" class="flex-1 bg-gray-800 hover:bg-blue-600 hover:text-white text-gray-300 px-3 py-2 rounded text-sm transition border border-gray-600">Bump Minor (0.X.0)</button>
+              <button onclick="bumpVersion('major')" class="flex-1 bg-gray-800 hover:bg-purple-600 hover:text-white text-gray-300 px-3 py-2 rounded text-sm transition border border-gray-600">Bump Major (X.0.0)</button>
+            </div>
+            <div id="bump-status" class="text-xs text-green-400 mt-2 hidden">Bump scheduled for next build!</div>
+          </div>
+
           <div>
-            <label class="block text-sm text-gray-400 mb-1">Custom Tags (comma separated)</label>
-            <input type="text" id="edit-tags" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" placeholder="e.g. stable, prod">
+            <label class="block text-sm text-gray-400 mb-1">Auto-Tag Every Build (comma separated)</label>
+            <input type="text" id="edit-tags" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm" placeholder="e.g. testing, nightly">
           </div>
 
           <div class="pt-4 flex justify-between border-t border-gray-700 mt-6">

@@ -9,7 +9,7 @@ import (
 
 // CloneRepo performs a shallow clone of the target branch into destPath
 func CloneRepo(repoURL, branch, destPath string) error {
-	cmd := exec.Command("git", "clone", "--depth", "1", "--branch", branch, repoURL, destPath)
+	cmd := exec.Command("git", "clone", "--depth", "1", "--branch", branch, InjectGHToken(repoURL, settings.GHToken), destPath)
 	
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -34,7 +34,7 @@ func GetLocalCommitHash(dir string) (string, error) {
 
 // GetRemoteCommitHash fetches the latest commit hash from the remote repository without cloning
 func GetRemoteCommitHash(repoURL, branch string) (string, error) {
-	cmd := exec.Command("git", "ls-remote", repoURL, branch)
+	cmd := exec.Command("git", "ls-remote", InjectGHToken(repoURL, settings.GHToken), branch)
 	
 	out, err := cmd.Output()
 	if err != nil {
