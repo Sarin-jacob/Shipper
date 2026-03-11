@@ -3,17 +3,24 @@ package internal
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
 
+type RegistryAuth struct {
+	URL      string `yaml:"url" json:"url"`
+	Username string `yaml:"username" json:"username"`
+	Password string `yaml:"password" json:"password"`
+}
+
 type GlobalSettings struct {
-	PollInterval    string   `yaml:"poll_interval"`    // e.g. "30m"
-	RetentionPolicy string   `yaml:"retention_policy"` // "all" or "one_per_minor"
-	GHToken         string   `yaml:"gh_token"`         // Hidden from UI
-	Registries      []string `yaml:"registries"`       // List of available registries
+	PollInterval    string         `yaml:"poll_interval"`
+	RetentionPolicy string         `yaml:"retention_policy"`
+	GHToken         string         `yaml:"gh_token"`
+	Registries      []RegistryAuth `yaml:"registries"` 
 }
 
 // LoadSettings reads the YAML file from the data directory
@@ -24,7 +31,7 @@ func LoadSettings(dataDir string) GlobalSettings {
 	settings := GlobalSettings{
 		PollInterval:    "1h",
 		RetentionPolicy: "one_per_minor",
-		Registries:      []string{},
+		Registries:      []RegistryAuth{},
 	}
 
 	data, err := os.ReadFile(path)
@@ -54,4 +61,13 @@ func InjectGHToken(repoURL, token string) string {
 		return strings.Replace(repoURL, "https://github.com/", "https://"+token+"@github.com/", 1)
 	}
 	return repoURL
+}
+
+func DockerLogin(registry RegistryAuth) error {
+	if registry.Username == "" || registry.Password == "" {
+		return nil // No auth provided, skip login
+	}
+	cmd := exec.Command("docker", "login", registry.URL, "-u", registry.Username, "--password-stdin")
+	cmd.Stdin = strings.NewReader(registry.Password)
+	return cmd.Run()
 }

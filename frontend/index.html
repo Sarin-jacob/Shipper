@@ -133,34 +133,39 @@
     </div>
 
     <div id="global-settings-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
-      <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-md border border-gray-700">
+      <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-lg border border-gray-700 max-h-[90vh] flex flex-col">
         <div class="px-6 py-4 border-b border-gray-700 flex justify-between items-center">
           <h2 class="text-lg font-semibold text-white">Global Shipper Settings</h2>
           <button onclick="closeModals()" class="text-gray-400 hover:text-white transition">&times;</button>
         </div>
-        <div class="p-6 space-y-4">
+        <div class="p-6 overflow-y-auto space-y-4">
           <div>
-            <label class="block text-sm text-gray-400 mb-1">Polling Interval (e.g. 30m, 1h)</label>
-            <input type="text" id="gs-poll" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm">
+            <label class="block text-sm text-gray-400 mb-1">Polling Interval</label>
+            <input type="text" id="gs-poll" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm" placeholder="1h">
           </div>
           <div>
             <label class="block text-sm text-gray-400 mb-1">Retention Policy</label>
             <select id="gs-retention" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm">
               <option value="one_per_minor">Keep 1 per Minor + Latest</option>
-              <option value="all">Keep All Builds (No Deletion)</option>
+              <option value="all">Keep All Builds</option>
             </select>
           </div>
           <div>
-            <label class="block text-sm text-gray-400 mb-1">GitHub PAT Token (For private repos)</label>
+            <label class="block text-sm text-gray-400 mb-1">GitHub PAT Token</label>
             <input type="password" id="gs-token" placeholder="Leave empty to keep existing" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm">
           </div>
-          <div>
-            <label class="block text-sm text-gray-400 mb-1">Available Registries (Comma separated)</label>
-            <input type="text" id="gs-registries" placeholder="docker.io/myuser, ghcr.io/myuser" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white text-sm">
+          
+          <div class="border-t border-gray-700 pt-4">
+            <div class="flex justify-between items-center mb-2">
+                <label class="block text-sm text-gray-400">Authenticated Registries</label>
+                <button type="button" onclick="addRegistryField()" class="text-xs bg-gray-700 hover:bg-gray-600 text-white px-2 py-1 rounded">+ Add</button>
+            </div>
+            <div id="registry-auth-list" class="space-y-2">
+                </div>
           </div>
-          <div class="pt-4 flex justify-end border-t border-gray-700 mt-6">
-            <button onclick="saveGlobalSettings()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm transition-colors">Save Settings</button>
-          </div>
+        </div>
+        <div class="p-6 border-t border-gray-700 bg-gray-800 rounded-b-lg flex justify-end">
+          <button onclick="saveGlobalSettings()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm transition-colors">Save Settings</button>
         </div>
       </div>
     </div>

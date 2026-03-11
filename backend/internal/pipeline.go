@@ -112,6 +112,20 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 // --- DB Helpers ---
 
 func recordBuildStart(db *sql.DB, projectID int, version, commit string) int64 {
+	// 1. Check for an existing FAILED build for this exact commit
+	var oldID int
+	var oldLogPath string
+	err := db.QueryRow("SELECT id, logs_path FROM builds WHERE project_id = ? AND commit_hash = ? AND status = 'failed'", projectID, commit).Scan(&oldID, &oldLogPath)
+	
+	if err == nil {
+		// Found one! Delete the physical log file and the DB records
+		os.Remove(oldLogPath)
+		db.Exec("DELETE FROM tags WHERE build_id = ?", oldID)
+		db.Exec("DELETE FROM builds WHERE id = ?", oldID)
+		log.Printf("[Project %d] Removed previous failed build entry for commit %s", projectID, commit[:7])
+	}
+
+	// 2. Insert the new build
 	res, _ := db.Exec(`INSERT INTO builds (project_id, version, commit_hash, status, started_at) VALUES (?, ?, ?, 'building', ?)`, projectID, version, commit, time.Now())
 	id, _ := res.LastInsertId()
 	return id

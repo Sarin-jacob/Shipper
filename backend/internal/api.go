@@ -253,15 +253,52 @@ func (s *Server) handleUpdateProjectTags(w http.ResponseWriter, r *http.Request)
 // --- Advanced Features Handlers ---
 
 func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
-	// We read the YAML file directly to pass the registry list to the UI
 	settings := LoadSettings(s.cfg.DataDir)
 	
 	if settings.GHToken != "" {
 		settings.GHToken = "********" 
 	}
+	// Mask registry passwords
+	for i := range settings.Registries {
+		if settings.Registries[i].Password != "" {
+			settings.Registries[i].Password = "********"
+		}
+	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(settings)
+}
+
+func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
+	var payload GlobalSettings
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid payload", http.StatusBadRequest)
+		return
+	}
+
+	current := LoadSettings(s.cfg.DataDir)
+	
+	if payload.GHToken == "********" || payload.GHToken == "" {
+		payload.GHToken = current.GHToken
+	}
+
+	// Handle masking for registries and trigger Docker Login!
+	for i, reg := range payload.Registries {
+		if reg.Password == "********" || reg.Password == "" {
+			// Find original password
+			for _, oldReg := range current.Registries {
+				if oldReg.URL == reg.URL {
+					payload.Registries[i].Password = oldReg.Password
+					break
+				}
+			}
+		}
+		// Actually authenticate the host Docker daemon!
+		DockerLogin(payload.Registries[i])
+	}
+
+	SaveSettings(s.cfg.DataDir, payload)
+	w.WriteHeader(http.StatusOK)
 }
 
 func (s *Server) handleProjectBump(w http.ResponseWriter, r *http.Request) {
@@ -319,23 +356,6 @@ func (s *Server) handleAddBuildTag(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
-	var payload GlobalSettings
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-		http.Error(w, "Invalid payload", http.StatusBadRequest)
-		return
-	}
-
-	current := LoadSettings(s.cfg.DataDir)
-	
-	// If the UI sends back the masked string or an empty string, keep the real token!
-	if payload.GHToken == "********" || payload.GHToken == "" {
-		payload.GHToken = current.GHToken
-	}
-
-	SaveSettings(s.cfg.DataDir, payload)
-	w.WriteHeader(http.StatusOK)
-}
 
 func (s *Server) handlePushBuild(w http.ResponseWriter, r *http.Request) {
 	buildID := r.PathValue("id")

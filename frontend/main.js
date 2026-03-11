@@ -123,20 +123,24 @@ async function fetchGlobalSettings() {
         if (!res.ok) return;
         const settings = await res.json();
         
-        // Populate Registry Dropdowns (for Add Project and Cross-Push)
+        dom.gs.poll.value = settings.poll_interval || '1h';
+        dom.gs.retention.value = settings.retention_policy || 'one_per_minor';
+        dom.gs.token.value = settings.gh_token === '********' ? '********' : '';
+
+        // Populate Registry Dropdowns & Settings List
+        const regList = document.getElementById('registry-auth-list');
+        regList.innerHTML = '';
         let options = '';
+
         if (settings.registries && settings.registries.length > 0) {
-            options = settings.registries.map(reg => `<option value="${reg}">${reg}</option>`).join('');
-            dom.gs.registries.value = settings.registries.join(', ');
+            settings.registries.forEach(reg => {
+                options += `<option value="${reg.url}">${reg.url}</option>`;
+                addRegistryField(reg.url, reg.username, reg.password);
+            });
         }
         
         if(dom.inputs.registry) dom.inputs.registry.innerHTML = `<option value="">Default Registry</option>` + options;
         if(dom.pushTargetRegistry) dom.pushTargetRegistry.innerHTML = options;
-
-        // Populate Global Settings Form
-        dom.gs.poll.value = settings.poll_interval || '1h';
-        dom.gs.retention.value = settings.retention_policy || 'one_per_minor';
-        dom.gs.token.value = settings.gh_token === '********' ? '********' : '';
 
     } catch (e) {
         console.error("Failed to load settings", e);
@@ -163,11 +167,17 @@ function openGlobalSettings() {
 }
 
 window.saveGlobalSettings = async () => {
+    const registries = Array.from(document.querySelectorAll('.registry-entry')).map(entry => ({
+        url: entry.querySelector('.reg-url').value.trim(),
+        username: entry.querySelector('.reg-user').value.trim(),
+        password: entry.querySelector('.reg-pass').value.trim()
+    })).filter(r => r.url !== '');
+
     const payload = {
         poll_interval: dom.gs.poll.value,
         retention_policy: dom.gs.retention.value,
         gh_token: dom.gs.token.value,
-        registries: dom.gs.registries.value.split(',').map(s => s.trim()).filter(Boolean)
+        registries: registries
     };
 
     try {
@@ -177,13 +187,25 @@ window.saveGlobalSettings = async () => {
             body: JSON.stringify(payload)
         });
         closeModals();
-        fetchGlobalSettings(); // Refresh dropdowns!
+        fetchGlobalSettings(); 
+        alert("Settings saved. Docker daemon has been authenticated with provided registries.");
     } catch (e) {
         alert("Failed to save global settings: " + e.message);
     }
 };
 
 // --- Cross-Registry Push ---
+window.addRegistryField = (url = '', username = '', password = '') => {
+    const div = document.createElement('div');
+    div.className = 'flex gap-2 registry-entry';
+    div.innerHTML = `
+        <input type="text" placeholder="URL (e.g. docker.io)" value="${url}" class="reg-url w-1/3 bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+        <input type="text" placeholder="Username" value="${username}" class="reg-user w-1/3 bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+        <input type="password" placeholder="Token/Password" value="${password}" class="reg-pass w-1/3 bg-gray-900 border border-gray-600 rounded px-2 py-1 text-white text-xs">
+        <button onclick="this.parentElement.remove()" class="text-red-400 hover:text-red-300 px-1">&times;</button>
+    `;
+    document.getElementById('registry-auth-list').appendChild(div);
+};
 
 window.pushBuild = async () => {
     const targetRegistry = dom.pushTargetRegistry.value;
@@ -268,6 +290,7 @@ window.fetchLogs = async (buildId) => {
     currentBuildId = buildId;
     dom.logViewer.textContent = "Loading logs...";
     dom.btnDeleteBuild.classList.remove('hidden');
+    dom.buildControls.classList.remove('hidden');
     dom.newBuildTag.value = '';
 
     try {
