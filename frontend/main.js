@@ -36,6 +36,10 @@ const dom = {
     buildControls: document.getElementById('build-controls'),
     newBuildTag: document.getElementById('new-build-tag'),
 
+    editRepo: document.getElementById('edit-repo'),
+    editBranch: document.getElementById('edit-branch'),
+    existingBuildTags: document.getElementById('existing-build-tags'),
+
     btnGlobalSettings: document.getElementById('btn-global-settings'),
     globalSettingsModal: document.getElementById('global-settings-modal'),
     pushTargetRegistry: document.getElementById('push-target-registry'),
@@ -51,6 +55,7 @@ const dom = {
 let isPolling = false;
 let currentProjectId;
 let currentBuildId;
+let globalProjects = [];
 
 async function init() {
     bindEvents();
@@ -150,10 +155,14 @@ async function fetchGlobalSettings() {
 // Settings and configuration
 function openSettingsModal(projectId) {
     currentProjectId = projectId;
-    dom.editProjectId.value = projectId;
+    const project = globalProjects.find(p => p.id == projectId);
     
-    // Ideally, we'd fetch the exact current tags from the API, 
-    // but for MVP we just clear it ready for new input.
+    dom.editProjectId.value = projectId;
+    dom.editRepo.value = project ? project.repo_url : '';
+    dom.editBranch.value = project ? project.branch : '';
+    
+    // In a full implementation, you'd fetch the existing tags from the DB.
+    // For now, we leave it blank for user input.
     dom.editTags.value = ''; 
     
     dom.backdrop.classList.remove('hidden');
@@ -233,12 +242,17 @@ window.pushBuild = async () => {
 };
 
 window.saveProjectSettings = async () => {
-    const tags = dom.editTags.value;
+    const payload = {
+        repo_url: dom.editRepo.value,
+        branch: dom.editBranch.value,
+        custom_tags: dom.editTags.value
+    };
+
     try {
-        await fetch(`${API_BASE}/projects/${currentProjectId}/tags`, { 
+        await fetch(`${API_BASE}/projects/${currentProjectId}`, { 
             method: 'PUT', 
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tags }) 
+            body: JSON.stringify(payload) 
         });
         closeModals();
         fetchProjects();
@@ -286,12 +300,45 @@ async function openBuildsModal(projectId) {
     }
 }
 
+async function fetchBuildTags(buildId) {
+    dom.existingBuildTags.innerHTML = '<span class="text-xs text-gray-500">Loading tags...</span>';
+    try {
+        const res = await fetch(`${API_BASE}/builds/${buildId}/tags`);
+        const tags = await res.json();
+        
+        if (tags.length === 0) {
+            dom.existingBuildTags.innerHTML = '';
+            return;
+        }
+
+        dom.existingBuildTags.innerHTML = tags.map(t => `
+            <span class="inline-flex items-center gap-1 bg-gray-800 border border-gray-600 text-gray-300 px-2 py-0.5 rounded text-xs">
+                ${t}
+                <button onclick="deleteBuildTag('${t}')" class="text-red-400 hover:text-red-300 ml-1 font-bold">&times;</button>
+            </span>
+        `).join('');
+    } catch (e) {
+        dom.existingBuildTags.innerHTML = '';
+    }
+}
+
+window.deleteBuildTag = async (tag) => {
+    if(!confirm(`Remove tag '${tag}' from the registry?`)) return;
+    try {
+        await fetch(`${API_BASE}/builds/${currentBuildId}/tags/${tag}`, { method: 'DELETE' });
+        fetchBuildTags(currentBuildId); // Refresh the tags list
+    } catch (e) {
+        alert("Failed to delete tag: " + e.message);
+    }
+};
+
 window.fetchLogs = async (buildId) => {
     currentBuildId = buildId;
     dom.logViewer.textContent = "Loading logs...";
-    dom.btnDeleteBuild.classList.remove('hidden');
     dom.buildControls.classList.remove('hidden');
-    dom.newBuildTag.value = '';
+    dom.newBuildTag.value = ''; 
+    
+    fetchBuildTags(buildId); // NEW: Load tags when opening logs
 
     try {
         const res = await fetch(`${API_BASE}/builds/${buildId}/logs`);
@@ -321,6 +368,7 @@ window.addBuildTag = async () => {
         
         alert(`Successfully pushed tag '${tag}' to the registry!`);
         dom.newBuildTag.value = '';
+        fetchBuildTags(currentBuildId); 
     } catch (e) {
         alert("Failed to tag image: " + e.message);
     } finally {
@@ -367,8 +415,8 @@ async function fetchProjects() {
     try {
         const res = await fetch(`${API_BASE}/projects`);
         if (!res.ok) throw new Error(`API Error: ${res.status}`);
-        const projects = await res.json();
-        renderProjects(projects);
+        globalProjects = await res.json(); // Store globally
+        renderProjects(globalProjects);
     } catch (err) {
         console.error('Failed to fetch projects:', err);
     }

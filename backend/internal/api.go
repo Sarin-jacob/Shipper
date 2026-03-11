@@ -40,12 +40,14 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	mux.HandleFunc("GET /api/builds/{id}/logs", s.handleGetLogs)
 	mux.HandleFunc("DELETE /api/projects/{id}", s.handleDeleteProject)
 	mux.HandleFunc("DELETE /api/builds/{id}", s.handleDeleteBuild)
-	mux.HandleFunc("PUT /api/projects/{id}/tags", s.handleUpdateProjectTags)
 
+	mux.HandleFunc("PUT /api/projects/{id}", s.handleUpdateProject)
 	mux.HandleFunc("GET /api/settings", s.handleGetSettings)
 	mux.HandleFunc("PUT /api/settings", s.handleUpdateSettings)
 	mux.HandleFunc("POST /api/projects/{id}/bump", s.handleProjectBump)
+	mux.HandleFunc("GET /api/builds/{id}/tags", s.handleGetBuildTags)
 	mux.HandleFunc("POST /api/builds/{id}/tags", s.handleAddBuildTag)
+	mux.HandleFunc("DELETE /api/builds/{id}/tags/{tag}", s.handleDeleteBuildTag)
 	mux.HandleFunc("POST /api/builds/{id}/push", s.handlePushBuild)
 
 	fileServer := http.FileServer(http.Dir(s.cfg.StaticDir))
@@ -235,18 +237,21 @@ func (s *Server) handleDeleteBuild(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func (s *Server) handleUpdateProjectTags(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	
 	var payload struct {
-		Tags string `json:"tags"`
+		RepoURL    string `json:"repo_url"`
+		Branch     string `json:"branch"`
+		CustomTags string `json:"custom_tags"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "Invalid payload", http.StatusBadRequest)
 		return
 	}
 
-	s.db.Exec("UPDATE projects SET custom_tags = ? WHERE id = ?", payload.Tags, projectID)
+	s.db.Exec("UPDATE projects SET repo_url = ?, branch = ?, custom_tags = ? WHERE id = ?", 
+		payload.RepoURL, payload.Branch, payload.CustomTags, projectID)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -390,5 +395,45 @@ func (s *Server) handlePushBuild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleGetBuildTags(w http.ResponseWriter, r *http.Request) {
+	buildID := r.PathValue("id")
+	
+	rows, err := s.db.Query("SELECT tag FROM tags WHERE build_id = ?", buildID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	var tags []string
+	for rows.Next() {
+		var t string
+		if rows.Scan(&t) == nil {
+			tags = append(tags, t)
+		}
+	}
+	if tags == nil {
+		tags = []string{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(tags)
+}
+
+func (s *Server) handleDeleteBuildTag(w http.ResponseWriter, r *http.Request) {
+	buildID := r.PathValue("id")
+	tag := r.PathValue("tag")
+
+	var imageName string
+	s.db.QueryRow("SELECT p.image_name FROM projects p JOIN builds b ON p.id = b.project_id WHERE b.id = ?", buildID).Scan(&imageName)
+
+	// 1. Attempt to delete from the OCI registry (we ignore the error in case it was already deleted manually)
+	_ = deleteRegistryTag(s.cfg.RegistryURL, imageName, tag)
+
+	// 2. Delete from our SQLite Database
+	s.db.Exec("DELETE FROM tags WHERE build_id = ? AND tag = ?", buildID, tag)
 	w.WriteHeader(http.StatusOK)
 }

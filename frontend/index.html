@@ -81,16 +81,21 @@
             <div class="flex justify-between items-center mb-3">
               <h3 class="text-sm font-medium text-gray-300">Build Logs</h3>
               
-              <div id="build-controls" class="hidden flex flex-wrap gap-2 items-center justify-end">
-                <div class="flex gap-1 border-r border-gray-700 pr-2">
-                  <input type="text" id="new-build-tag" placeholder="Add tag (e.g. prod)" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-28">
-                  <button onclick="addBuildTag()" class="bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white px-2 py-1 rounded text-xs border border-blue-600/50 transition">Tag</button>
+              <div id="build-controls" class="hidden flex flex-col gap-2 items-end justify-end">
+                
+                <div id="existing-build-tags" class="flex flex-wrap gap-1 justify-end w-full"></div>
+                
+                <div class="flex flex-wrap gap-2 items-center justify-end">
+                  <div class="flex gap-1 border-r border-gray-700 pr-2">
+                    <input type="text" id="new-build-tag" placeholder="Add tag (e.g. prod)" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-28">
+                    <button onclick="addBuildTag()" class="bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white px-2 py-1 rounded text-xs border border-blue-600/50 transition">Tag</button>
+                  </div>
+                  <div class="flex gap-1 border-r border-gray-700 pr-2">
+                    <select id="push-target-registry" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-32"></select>
+                    <button onclick="pushBuild()" class="bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white px-2 py-1 rounded text-xs border border-purple-600/50 transition">Push</button>
+                  </div>
+                  <button id="btn-delete-build" class="text-xs bg-red-900/50 text-red-400 hover:bg-red-900 px-2 py-1 rounded transition border border-red-900">Delete Build</button>
                 </div>
-                <div class="flex gap-1 border-r border-gray-700 pr-2">
-                  <select id="push-target-registry" class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white w-32"></select>
-                  <button onclick="pushBuild()" class="bg-purple-600/20 text-purple-400 hover:bg-purple-600 hover:text-white px-2 py-1 rounded text-xs border border-purple-600/50 transition">Push</button>
-                </div>
-                <button id="btn-delete-build" class="text-xs bg-red-900/50 text-red-400 hover:bg-red-900 px-2 py-1 rounded transition border border-red-900">Delete</button>
               </div>
 
             </div>
@@ -108,7 +113,17 @@
         </div>
         <div class="p-6 space-y-6">
           <input type="hidden" id="edit-project-id">
-          
+          <div class="bg-gray-900 p-4 rounded border border-gray-700 space-y-3">
+            <h3 class="text-sm font-medium text-gray-300 mb-2">Repository Configuration</h3>
+            <div>
+              <label class="block text-xs text-gray-400 mb-1">Git Repository URL</label>
+              <input type="text" id="edit-repo" class="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white text-sm">
+            </div>
+            <div>
+              <label class="block text-xs text-gray-400 mb-1">Branch</label>
+              <input type="text" id="edit-branch" class="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white text-sm">
+            </div>
+          </div>
           <div class="bg-gray-900 p-4 rounded border border-gray-700">
             <h3 class="text-sm font-medium text-gray-300 mb-2">Version Control</h3>
             <p class="text-xs text-gray-500 mb-3">Schedule a version jump for the next automated or manual build.</p>
