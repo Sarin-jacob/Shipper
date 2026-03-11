@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
-	"database/sql"
 )
 
 // ApplyRetentionPolicy keeps 'latest' and the highest patch of each minor version
