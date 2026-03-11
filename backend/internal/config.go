@@ -26,7 +26,7 @@ func LoadConfig() Config {
 		PollInterval: getEnvDuration("SHIPPER_POLL_INTERVAL", 1*time.Hour),
 		DataDir:      getEnv("SHIPPER_DATA_DIR", "./data"),
 		StaticDir:    getEnv("SHIPPER_STATIC_DIR", "./static"),
-		RegistryContainer: getEnv("SHIPER_REGISTRY_CONTAINER", "shiper_registry"),
+		RegistryContainer: getEnv("SHIPPER_REGISTRY_CONTAINER", "shipper_registry"),
 	}
 }
 
