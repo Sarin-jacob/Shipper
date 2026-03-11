@@ -6,20 +6,23 @@ import (
 	"net/http"
 	"os/exec"
 	"strings"
+	"database/sql"
 )
 
 // ApplyRetentionPolicy keeps 'latest' and the highest patch of each minor version
-func ApplyRetentionPolicy(registryURL, repository string, currentVersions []string) error {
+func ApplyRetentionPolicy(db *sql.DB, projectID int, registryURL, repository string, currentVersions []string, policy string) error {
+	// If policy is "all", we skip cleanup entirely
 	if policy == "all" {
 		return nil
 	}
+
 	keepMap := make(map[string]bool)
 	keepMap["latest"] = true
 
 	highestPatches := make(map[string]string)
 	for _, v := range currentVersions {
 		if strings.HasPrefix(v, "commit-") || v == "latest" {
-			continue // Handle commit tags separately if you want to clean them up too
+			continue 
 		}
 
 		parts := strings.Split(v, ".")
@@ -39,7 +42,10 @@ func ApplyRetentionPolicy(registryURL, repository string, currentVersions []stri
 	for _, v := range currentVersions {
 		if !keepMap[v] && !strings.HasPrefix(v, "commit-") {
 			fmt.Printf("Untagging old version: %s:%s\n", repository, v)
-			if err := deleteRegistryTag(registryURL, repository, v); err != nil {
+			
+			err := deleteRegistryTag(registryURL, repository, v)
+			if err != nil {
+				// If it's a 404, it's already gone from the registry! We just need to sync the DB.
 				if strings.Contains(err.Error(), "404") {
 					fmt.Printf("Tag %s already missing from registry. Syncing DB.\n", v)
 				} else {
@@ -47,6 +53,8 @@ func ApplyRetentionPolicy(registryURL, repository string, currentVersions []stri
 					continue
 				}
 			}
+
+			// Sync the Database! Change status so UI knows it was cleaned up
 			db.Exec("UPDATE builds SET status = 'archived' WHERE version = ? AND project_id = ?", v, projectID)
 		}
 	}

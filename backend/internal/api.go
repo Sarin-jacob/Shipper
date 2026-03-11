@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"fmt"
 )
 
 // Server holds the database connection and configuration

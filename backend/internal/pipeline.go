@@ -14,7 +14,7 @@ import (
 // ExecuteBuild runs the full CI/CD pipeline
 func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 	log.Printf("[Project %d] Starting build pipeline...", projectID)
-
+	settings := LoadSettings(cfg.DataDir)
 	// 1. Fetch project details
 	var name, repoURL, branch, imageName, customTagsStr, registryOverride string
 	err := db.QueryRow("SELECT name, repo_url, branch, image_name, COALESCE(custom_tags, ''), COALESCE(registry_override, '') FROM projects WHERE id = ?", projectID).
@@ -40,7 +40,7 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 	defer os.RemoveAll(workDir)
 
 	// Clone & Check Commit
-	if err := CloneRepo(repoURL, branch, workDir); err != nil {
+	if err := CloneRepo(repoURL, branch, workDir,settings.GHToken); err != nil {
 		return err
 	}
 
@@ -98,7 +98,7 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 		// Run retention policy asynchronously
 		go func() {
 			allVersions := fetchAllVersions(db, projectID)
-			ApplyRetentionPolicy(cfg.RegistryURL, imageName, allVersions)
+			ApplyRetentionPolicy(db, projectID, cfg.RegistryURL, imageName, allVersions, settings.RetentionPolicy)
 			if err := RunGarbageCollection(cfg.RegistryContainer); err != nil {
 				log.Printf("Registry GC error: %v", err)
 			}

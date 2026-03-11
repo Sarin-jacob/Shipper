@@ -41,7 +41,7 @@ func (s *Scheduler) pollProjects() {
 		return
 	}
 	defer rows.Close()
-
+	settings := LoadSettings(s.cfg.DataDir)
 	for rows.Next() {
 		var id int
 		var repoURL, branch string
@@ -50,7 +50,7 @@ func (s *Scheduler) pollProjects() {
 		}
 
 		// Check remote commit without cloning
-		remoteCommit, err := GetRemoteCommitHash(repoURL, branch)
+		remoteCommit, err := GetRemoteCommitHash(repoURL, branch, settings.GHToken)
 		if err != nil {
 			log.Printf("[Project %d] Failed to check remote commit: %v", id, err)
 			continue

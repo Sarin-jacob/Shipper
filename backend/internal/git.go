@@ -3,13 +3,18 @@ package internal
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
 
 // CloneRepo performs a shallow clone of the target branch into destPath
-func CloneRepo(repoURL, branch, destPath string) error {
-	cmd := exec.Command("git", "clone", "--depth", "1", "--branch", branch, InjectGHToken(repoURL, settings.GHToken), destPath)
+func CloneRepo(repoURL, branch, destPath, ghToken string) error {
+	// Inject the token safely
+	repoURL = InjectGHToken(repoURL, ghToken)
+
+	cmd := exec.Command("git", "clone", "--depth", "1", "--branch", branch, repoURL, destPath)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -33,15 +38,17 @@ func GetLocalCommitHash(dir string) (string, error) {
 }
 
 // GetRemoteCommitHash fetches the latest commit hash from the remote repository without cloning
-func GetRemoteCommitHash(repoURL, branch string) (string, error) {
-	cmd := exec.Command("git", "ls-remote", InjectGHToken(repoURL, settings.GHToken), branch)
+func GetRemoteCommitHash(repoURL, branch, ghToken string) (string, error) {
+	repoURL = InjectGHToken(repoURL, ghToken)
+
+	cmd := exec.Command("git", "ls-remote", repoURL, branch)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 	
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("failed to get remote commit hash: %v", err)
 	}
 
-	// Output format is: "<hash>\trefs/heads/<branch>\n"
 	fields := strings.Fields(string(out))
 	if len(fields) > 0 {
 		return fields[0], nil
