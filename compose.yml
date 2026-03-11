@@ -1,0 +1,38 @@
+services:
+  shipper:
+    image: oci.jell0.online/Shipper:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Try to pull the image first. If it's not found, fallback to building it.
+    pull_policy: missing
+    container_name: shipper
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - SHIPPER_PORT=8080
+      - SHIPPER_REGISTRY=oci.jell0.online
+      # Adjust this if you want to poll faster/slower
+      - SHIPPER_POLL_INTERVAL=1h 
+      # Since you sometimes use CEST for alarms, you can force the container timezone here if needed:
+      - TZ=Asia/Kolkata
+    volumes:
+      # Mount the data directory to persist the SQLite DB and build logs
+      - ./shipper_data:/app/data
+      # Mount the host's Docker socket so Shiper can run `docker buildx` commands
+      - /var/run/docker.sock:/var/run/docker.sock
+    
+
+  registry:
+    image: registry:2
+    container_name: shipper_registry
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    environment:
+      # THIS IS REQUIRED for Shiper's retention policy to work!
+      - REGISTRY_STORAGE_DELETE_ENABLED=true
+    volumes:
+      # This is where all your pushed Docker images (blobs and manifests) will live
+      - ./registry_data:/var/lib/registry

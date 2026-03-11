@@ -4,7 +4,7 @@ package internal
 import (
 	"fmt"
 	"net/http"
-	// "sort"
+	"os/exec"
 	"strings"
 )
 
@@ -83,5 +83,19 @@ func deleteRegistryTag(registryURL, repository, tag string) error {
 		return fmt.Errorf("failed to delete, status: %d", delResp.StatusCode)
 	}
 
+	return nil
+}
+
+func RunGarbageCollection(containerName string) error {
+	fmt.Println("Triggering Registry Garbage Collection...")
+
+	cmd := exec.Command("docker", "exec", containerName, "bin/registry", "garbage-collect", "/etc/docker/registry/config.yml", "--delete-untagged")
+	
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("garbage collection failed: %v\nOutput: %s", err, string(output))
+	}
+
+	fmt.Println("✨ Garbage Collection complete!")
 	return nil
 }

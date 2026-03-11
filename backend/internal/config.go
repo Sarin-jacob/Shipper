@@ -14,17 +14,19 @@ type Config struct {
 	PollInterval time.Duration
 	DataDir      string
 	StaticDir    string
+	RegistryContainer string
 }
 
 // LoadConfig parses environment variables and returns a populated Config
 func LoadConfig() Config {
 	return Config{
-		Port:         getEnv("SHIPER_PORT", "8080"),
-		DBPath:       getEnv("SHIPER_DB_PATH", "./data/shiper.db"),
-		RegistryURL:  getEnv("SHIPER_REGISTRY", "oci.jell0.online"),
-		PollInterval: getEnvDuration("SHIPER_POLL_INTERVAL", 1*time.Hour),
-		DataDir:      getEnv("SHIPER_DATA_DIR", "./data"),
-		StaticDir:    getEnv("SHIPER_STATIC_DIR", "./static"),
+		Port:         getEnv("SHIPPER_PORT", "8080"),
+		DBPath:       getEnv("SHIPPER_DB_PATH", "./data/shiper.db"),
+		RegistryURL:  getEnv("SHIPPER_REGISTRY", "localhost:8000"),
+		PollInterval: getEnvDuration("SHIPPER_POLL_INTERVAL", 1*time.Hour),
+		DataDir:      getEnv("SHIPPER_DATA_DIR", "./data"),
+		StaticDir:    getEnv("SHIPPER_STATIC_DIR", "./static"),
+		RegistryContainer: getEnv("SHIPER_REGISTRY_CONTAINER", "shiper_registry"),
 	}
 }
 

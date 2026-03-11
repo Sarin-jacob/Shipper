@@ -79,6 +79,6 @@ func InitDB(dbPath string) (*sql.DB, error) {
 		return nil, err
 	}
 
-	log.Println("✅ SQLite database initialized.")
+	log.Println("SQLite database initialized.")
 	return db, nil
 }

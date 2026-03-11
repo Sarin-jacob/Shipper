@@ -80,6 +80,9 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 		go func() {
 			allVersions := fetchAllVersions(db, projectID)
 			ApplyRetentionPolicy(cfg.RegistryURL, imageName, allVersions)
+			if err := RunGarbageCollection(cfg.RegistryContainer); err != nil {
+				log.Printf("Registry GC error: %v", err)
+			}
 		}()
 	}
 
