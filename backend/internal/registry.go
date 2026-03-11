@@ -89,13 +89,24 @@ func deleteRegistryTag(registryURL, repository, tag string) error {
 func RunGarbageCollection(containerName string) error {
 	fmt.Println("Triggering Registry Garbage Collection...")
 
-	cmd := exec.Command("docker", "exec", containerName, "bin/registry", "garbage-collect", "/etc/docker/registry/config.yml", "--delete-untagged")
+	gcScript := `
+		if [ -f /etc/distribution/config.yml ]; then
+			bin/registry garbage-collect /etc/distribution/config.yml --delete-untagged
+		elif [ -f /etc/docker/registry/config.yml ]; then
+			bin/registry garbage-collect /etc/docker/registry/config.yml --delete-untagged
+		else
+			echo "Could not find registry config file"
+			exit 1
+		fi
+	`
+
+	cmd := exec.Command("docker", "exec", containerName, "sh", "-c", gcScript)
 	
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("garbage collection failed: %v\nOutput: %s", err, string(output))
 	}
 
-	fmt.Println("✨ Garbage Collection complete!")
+	fmt.Println("Garbage Collection complete!")
 	return nil
 }
