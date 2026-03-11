@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Shiper</title>
+    <title>Shipper</title>
     <link rel="stylesheet" href="./style.css">
   </head>
   <body class="bg-gray-900 text-gray-100 font-sans h-screen flex flex-col antialiased">
@@ -11,7 +11,7 @@
     <header class="bg-gray-800 border-b border-gray-700 px-6 py-4 flex items-center justify-between shadow-sm">
       <div class="flex items-center space-x-3">
         <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 002-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
-        <h1 class="text-xl font-bold tracking-tight text-white">Shiper</h1>
+        <h1 class="text-xl font-bold tracking-tight text-white">Shipper</h1>
       </div>
       <button id="btn-open-modal" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm">
         + Add Project
@@ -61,6 +61,50 @@
             </button>
           </div>
         </form>
+      </div>
+    </div>
+
+    <div id="modal-backdrop" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden z-40 transition-opacity"></div>
+
+    <div id="builds-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+      <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-4xl border border-gray-700 flex flex-col max-h-[90vh]">
+        <div class="px-6 py-4 border-b border-gray-700 flex justify-between items-center">
+          <h2 class="text-lg font-semibold text-white">Build History</h2>
+          <button onclick="closeModals()" class="text-gray-400 hover:text-white transition">&times; Close</button>
+        </div>
+        <div class="flex-1 overflow-auto p-6 flex gap-6">
+          <div class="w-1/3 border-r border-gray-700 pr-4 overflow-y-auto" id="build-list-container">
+            </div>
+          <div class="w-2/3 flex flex-col">
+            <div class="flex justify-between items-center mb-2">
+              <h3 class="text-sm font-medium text-gray-300">Build Logs</h3>
+              <button id="btn-delete-build" class="text-xs bg-red-900/50 text-red-400 hover:bg-red-900 px-2 py-1 rounded hidden">Delete Build</button>
+            </div>
+            <pre id="log-viewer" class="bg-gray-900 text-gray-300 p-4 rounded text-xs font-mono overflow-auto flex-1 border border-gray-700">Select a build to view logs...</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="settings-modal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4">
+      <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-md border border-gray-700">
+        <div class="px-6 py-4 border-b border-gray-700 flex justify-between items-center">
+          <h2 class="text-lg font-semibold text-white">Project Settings</h2>
+          <button onclick="closeModals()" class="text-gray-400 hover:text-white transition">&times;</button>
+        </div>
+        <div class="p-6 space-y-4">
+          <input type="hidden" id="edit-project-id">
+          
+          <div>
+            <label class="block text-sm text-gray-400 mb-1">Custom Tags (comma separated)</label>
+            <input type="text" id="edit-tags" class="w-full bg-gray-900 border border-gray-600 rounded p-2 text-white" placeholder="e.g. stable, prod">
+          </div>
+
+          <div class="pt-4 flex justify-between border-t border-gray-700 mt-6">
+            <button onclick="deleteProject()" class="text-red-400 hover:text-red-300 text-sm font-medium">Delete Project</button>
+            <button onclick="saveProjectSettings()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded text-sm transition-colors">Save Changes</button>
+          </div>
+        </div>
       </div>
     </div>
 

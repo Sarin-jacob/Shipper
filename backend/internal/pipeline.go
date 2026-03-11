@@ -8,15 +8,16 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+	"strings"
 )
 
 // ExecuteBuild runs the full CI/CD pipeline
 func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 	log.Printf("[Project %d] Starting build pipeline...", projectID)
 
-	var name, repoURL, branch, imageName string
-	err := db.QueryRow("SELECT name, repo_url, branch, image_name FROM projects WHERE id = ?", projectID).
-		Scan(&name, &repoURL, &branch, &imageName)
+	var name, repoURL, branch, imageName, customTagsStr string
+	err := db.QueryRow("SELECT name, repo_url, branch, image_name, COALESCE(custom_tags, '') FROM projects WHERE id = ?", projectID).
+		Scan(&name, &repoURL, &branch, &imageName, &customTagsStr)
 	if err != nil {
 		return fmt.Errorf("failed to fetch project: %v", err)
 	}
@@ -57,6 +58,13 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 	newVersion, err := IncrementPatch(currentVersion)
 	if err != nil {
 		return err
+	}
+
+	var customTags []string
+	if customTagsStr != "" {
+		for _, t := range strings.Split(customTagsStr, ",") {
+			customTags = append(customTags, strings.TrimSpace(t))
+		}
 	}
 	
 	tags := GenerateTags(imageName, newVersion, commitHash, []string{})

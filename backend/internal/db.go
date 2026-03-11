@@ -78,6 +78,7 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	if _, err = db.Exec(schema); err != nil {
 		return nil, err
 	}
+	_, _ = db.Exec("ALTER TABLE projects ADD COLUMN custom_tags TEXT DEFAULT ''")
 
 	log.Println("SQLite database initialized.")
 	return db, nil

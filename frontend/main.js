@@ -1,5 +1,5 @@
 /**
- * Shiper Frontend Logic
+ * Shipper Frontend Logic
  * Handles project management, dashboard rendering, and build triggering.
  */
 
@@ -17,7 +17,20 @@ const dom = {
         name: document.getElementById('proj-name'),
         repo: document.getElementById('proj-repo'),
         branch: document.getElementById('proj-branch'),
-    }
+    },
+    // Global Modals
+    backdrop: document.getElementById('modal-backdrop'),
+    
+    // Builds & Logs Modal
+    buildsModal: document.getElementById('builds-modal'),
+    buildList: document.getElementById('build-list-container'),
+    logViewer: document.getElementById('log-viewer'),
+    btnDeleteBuild: document.getElementById('btn-delete-build'),
+    
+    // Settings Modal
+    settingsModal: document.getElementById('settings-modal'),
+    editProjectId: document.getElementById('edit-project-id'),
+    editTags: document.getElementById('edit-tags')
 };
 
 // State
@@ -40,12 +53,22 @@ function bindEvents() {
     
     // Event delegation for project cards (Build buttons)
     dom.projectsContainer.addEventListener('click', (e) => {
-        const btn = e.target.closest('button[data-action="build"]');
-        if (btn) {
-            const id = btn.dataset.id;
-            triggerBuild(id);
-        }
+        const btn = e.target.closest('button[data-action]');
+        if (!btn) return;
+
+        const id = btn.dataset.id;
+        const action = btn.dataset.action;
+
+        if (action === 'build') triggerBuild(id);
+        if (action === 'logs') openBuildsModal(id);
+        if (action === 'settings') openSettingsModal(id);
     });
+
+    if(dom.btnDeleteBuild) {
+        dom.btnDeleteBuild.addEventListener('click', () => {
+            if(currentBuildId) deleteBuild(currentBuildId);
+        });
+    }
 }
 
 function startPolling() {
@@ -66,6 +89,112 @@ function closeModal() {
     dom.modal.classList.add('hidden');
     dom.form.reset();
 }
+
+window.closeModals = () => {
+    if(dom.backdrop) dom.backdrop.classList.add('hidden');
+    if(dom.buildsModal) dom.buildsModal.classList.add('hidden');
+    if(dom.settingsModal) dom.settingsModal.classList.add('hidden');
+    currentProjectId = null;
+    currentBuildId = null;
+};
+
+// Settings and configuration
+function openSettingsModal(projectId) {
+    currentProjectId = projectId;
+    dom.editProjectId.value = projectId;
+    
+    // Ideally, we'd fetch the exact current tags from the API, 
+    // but for MVP we just clear it ready for new input.
+    dom.editTags.value = ''; 
+    
+    dom.backdrop.classList.remove('hidden');
+    dom.settingsModal.classList.remove('hidden');
+}
+
+window.saveProjectSettings = async () => {
+    const tags = dom.editTags.value;
+    try {
+        await fetch(`${API_BASE}/projects/${currentProjectId}/tags`, { 
+            method: 'PUT', 
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tags }) 
+        });
+        closeModals();
+        fetchProjects();
+    } catch(e) {
+        alert("Failed to save settings: " + e.message);
+    }
+};
+
+window.deleteProject = async () => {
+    if(!confirm("Are you sure? This will permanently delete the project, history, and all logs.")) return;
+    try {
+        await fetch(`${API_BASE}/projects/${currentProjectId}`, { method: 'DELETE' });
+        closeModals();
+        fetchProjects();
+    } catch(e) {
+        alert("Failed to delete project: " + e.message);
+    }
+};
+
+// BUilds and logs
+async function openBuildsModal(projectId) {
+    currentProjectId = projectId;
+    dom.backdrop.classList.remove('hidden');
+    dom.buildsModal.classList.remove('hidden');
+    
+    dom.buildList.innerHTML = `<div class="text-gray-400 text-sm">Loading builds...</div>`;
+    dom.logViewer.textContent = "Select a build to view logs...";
+    dom.btnDeleteBuild.classList.add('hidden');
+
+    try {
+        const res = await fetch(`${API_BASE}/projects/${projectId}/builds`);
+        const builds = await res.json();
+
+        dom.buildList.innerHTML = builds.map(b => `
+            <div onclick="fetchLogs(${b.id})" class="p-3 mb-2 bg-gray-900 rounded border border-gray-700 cursor-pointer hover:border-gray-500 transition">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="font-mono text-sm text-blue-400">${b.version}</span>
+                    <span class="text-xs ${b.status === 'success' ? 'text-green-400' : b.status === 'failed' ? 'text-red-400' : 'text-blue-400'}">${b.status}</span>
+                </div>
+                <div class="text-xs text-gray-500 font-mono">Commit: ${b.commit_hash.substring(0,7)}</div>
+            </div>
+        `).join('');
+    } catch(e) {
+        dom.buildList.innerHTML = `<div class="text-red-400 text-sm">Failed to load builds</div>`;
+    }
+}
+
+window.fetchLogs = async (buildId) => {
+    currentBuildId = buildId;
+    dom.logViewer.textContent = "Loading logs...";
+    dom.btnDeleteBuild.classList.remove('hidden');
+
+    try {
+        const res = await fetch(`${API_BASE}/builds/${buildId}/logs`);
+        if (!res.ok) throw new Error("Logs not found");
+        dom.logViewer.textContent = await res.text();
+        dom.logViewer.scrollTop = dom.logViewer.scrollHeight; 
+    } catch (e) {
+        dom.logViewer.textContent = "Logs not available for this build.";
+    }
+};
+
+async function deleteBuild(buildId) {
+    if(!confirm("Delete this build and its logs permanently?")) return;
+    try {
+        await fetch(`${API_BASE}/builds/${buildId}`, { method: 'DELETE' });
+        
+        dom.logViewer.textContent = "Build deleted.";
+        dom.btnDeleteBuild.classList.add('hidden');
+        
+        // Refresh the builds list in the modal
+        if (currentProjectId) openBuildsModal(currentProjectId);
+    } catch(e) {
+        alert("Failed to delete build: " + e.message);
+    }
+}
+
 
 // --- API Interactions ---
 
@@ -101,10 +230,7 @@ async function handleAddProject(e) {
             body: JSON.stringify(payload)
         });
 
-        if (!res.ok) {
-            const errText = await res.text();
-            throw new Error(errText || 'Failed to create project');
-        }
+        if (!res.ok) throw new Error(await res.text() || 'Failed to create project');
 
         closeModal();
         fetchProjects();
@@ -120,8 +246,6 @@ async function triggerBuild(id) {
     try {
         const res = await fetch(`${API_BASE}/projects/${id}/build`, { method: 'POST' });
         if (!res.ok) throw new Error('Failed to trigger build');
-        
-        // Force immediate refresh to show "building" status
         fetchProjects(); 
     } catch (err) {
         alert(`Error triggering build: ${err.message}`);
@@ -174,15 +298,33 @@ function renderProjects(projects) {
                     <span class="text-sm font-mono text-gray-200">${p.version || '0.0.0'}</span>
                 </div>
                 
-                <button 
-                    data-action="build" 
-                    data-id="${p.id}"
-                    class="bg-gray-700 hover:bg-blue-600 hover:text-white text-gray-200 px-4 py-2 rounded-md text-sm font-medium transition-colors border border-gray-600 shadow-sm flex items-center gap-2 group-hover:border-gray-500 ${isBuilding ? 'opacity-50 cursor-not-allowed' : ''}"
-                    ${isBuilding ? 'disabled' : ''}
-                >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
-                    Build Now
-                </button>
+                <div class="flex items-center gap-2">
+                    <button 
+                        data-action="logs" 
+                        data-id="${p.id}"
+                        class="bg-gray-700 hover:bg-gray-600 text-gray-200 px-3 py-2 rounded-md text-sm font-medium transition-colors border border-gray-600 shadow-sm flex items-center"
+                        title="View Build History & Logs"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h7"></path></svg>
+                    </button>
+                    <button 
+                        data-action="settings" 
+                        data-id="${p.id}"
+                        class="bg-gray-700 hover:bg-gray-600 text-gray-200 px-3 py-2 rounded-md text-sm font-medium transition-colors border border-gray-600 shadow-sm flex items-center"
+                        title="Project Settings"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                    </button>
+                    <button 
+                        data-action="build" 
+                        data-id="${p.id}"
+                        class="bg-gray-700 hover:bg-blue-600 hover:text-white text-gray-200 px-4 py-2 rounded-md text-sm font-medium transition-colors border border-gray-600 shadow-sm flex items-center gap-2 group-hover:border-gray-500 ${isBuilding ? 'opacity-50 cursor-not-allowed' : ''}"
+                        ${isBuilding ? 'disabled' : ''}
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        Build Now
+                    </button>
+                </div>
             </div>
         </div>
         `;

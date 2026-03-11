@@ -1,6 +1,6 @@
 services:
   shipper:
-    image: oci.jell0.online/Shipper:latest
+    image: oci.jell0.online/shipper:latest
     build:
       context: .
       dockerfile: Dockerfile

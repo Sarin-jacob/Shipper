@@ -37,6 +37,9 @@ func (s *Server) SetupRoutes() *http.ServeMux {
 	mux.HandleFunc("POST /api/projects/{id}/build", s.handleTriggerBuild)
 	mux.HandleFunc("GET /api/projects/{id}/builds", s.handleGetBuilds)
 	mux.HandleFunc("GET /api/builds/{id}/logs", s.handleGetLogs)
+	mux.HandleFunc("DELETE /api/projects/{id}", s.handleDeleteProject)
+	mux.HandleFunc("DELETE /api/builds/{id}", s.handleDeleteBuild)
+	mux.HandleFunc("PUT /api/projects/{id}/tags", s.handleUpdateProjectTags)
 
 	fileServer := http.FileServer(http.Dir(s.cfg.StaticDir))
 	mux.Handle("/", fileServer)
@@ -188,4 +191,54 @@ func (s *Server) handleGetLogs(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/plain")
 	io.Copy(w, file)
+}
+
+// --- Cleanup & Settings Handlers ---
+
+func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
+	projectID := r.PathValue("id")
+
+	// 1. Delete physical log files
+	logDir := s.cfg.DataDir + "/logs/project_" + projectID
+	os.RemoveAll(logDir)
+
+	// 2. Delete from DB (Delete child rows first to avoid orphans)
+	s.db.Exec("DELETE FROM tags WHERE build_id IN (SELECT id FROM builds WHERE project_id = ?)", projectID)
+	s.db.Exec("DELETE FROM builds WHERE project_id = ?", projectID)
+	s.db.Exec("DELETE FROM state WHERE project_id = ?", projectID)
+	s.db.Exec("DELETE FROM projects WHERE id = ?", projectID)
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleDeleteBuild(w http.ResponseWriter, r *http.Request) {
+	buildID := r.PathValue("id")
+
+	// 1. Fetch log path and delete the file
+	var logsPath string
+	s.db.QueryRow("SELECT logs_path FROM builds WHERE id = ?", buildID).Scan(&logsPath)
+	if logsPath != "" {
+		os.Remove(logsPath)
+	}
+
+	// 2. Delete from DB
+	s.db.Exec("DELETE FROM tags WHERE build_id = ?", buildID)
+	s.db.Exec("DELETE FROM builds WHERE id = ?", buildID)
+
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleUpdateProjectTags(w http.ResponseWriter, r *http.Request) {
+	projectID := r.PathValue("id")
+	
+	var payload struct {
+		Tags string `json:"tags"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid payload", http.StatusBadRequest)
+		return
+	}
+
+	s.db.Exec("UPDATE projects SET custom_tags = ? WHERE id = ?", payload.Tags, projectID)
+	w.WriteHeader(http.StatusOK)
 }
