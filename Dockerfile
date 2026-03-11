@@ -25,7 +25,7 @@ RUN go mod download
 
 # Copy source and build the binary
 COPY backend/ ./
-RUN CGO_ENABLED=1 GOOS=linux go build -o shipper cmd/shiper/main.go
+RUN CGO_ENABLED=1 GOOS=linux go build -o shipper cmd/shipper/main.go
 
 # ==========================================
 # Stage 3: The Final Minimal Runtime
@@ -48,7 +48,7 @@ ENV SHIPPER_PORT=8080
 ENV SHIPPER_STATIC_DIR=/app/static
 ENV SHIPPER_DATA_DIR=/app/data
 ENV SHIPPER_DB_PATH=/app/data/shipper.db
-ENV SHIPPER_REGISTRY=localhost:8000
+ENV SHIPPER_REGISTRY=localhost:5000
 
 # Create the data directory so SQLite has a place to write
 RUN mkdir -p /app/data
