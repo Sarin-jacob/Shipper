@@ -35,6 +35,8 @@ const dom = {
 
 // State
 let isPolling = false;
+let currentProjectId;
+let currentBuildId;
 
 function init() {
     bindEvents();
