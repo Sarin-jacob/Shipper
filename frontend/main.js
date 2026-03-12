@@ -353,7 +353,7 @@ window.deleteBuildTag = async (tag) => {
     if(!confirm(`Remove tag '${tag}' from the registry?`)) return;
     try {
         await fetch(`${API_BASE}/builds/${currentBuildId}/tags/${tag}`, { method: 'DELETE' });
-        fetchBuildTags(currentBuildId); // Refresh the tags list
+        fetchBuildTags(currentBuildId);
     } catch (e) {
         alert("Failed to delete tag: " + e.message);
     }
