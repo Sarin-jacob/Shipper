@@ -35,7 +35,13 @@ func (s *Scheduler) Start() {
 }
 
 func (s *Scheduler) pollProjects() {
-	rows, err := s.db.Query("SELECT id, repo_url, branch FROM projects WHERE enabled = 1")
+	query := `
+		SELECT p.id, p.repo_url, p.branch 
+		FROM projects p 
+		LEFT JOIN builds b ON p.id = b.project_id AND b.status = 'building'
+		WHERE p.enabled = 1 AND b.id IS NULL
+	`
+	rows, err := s.db.Query(query)
 	if err != nil {
 		log.Printf("Polling error fetching projects: %v", err)
 		return

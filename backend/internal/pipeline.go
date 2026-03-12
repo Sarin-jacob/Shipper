@@ -13,11 +13,19 @@ import (
 
 // ExecuteBuild runs the full CI/CD pipeline
 func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
+	// --- ANTI-RACE CONDITION LOCK ---
+	var isBuilding bool
+	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM builds WHERE project_id = ? AND status = 'building')", projectID).Scan(&isBuilding)
+	if err == nil && isBuilding {
+		log.Printf("[Project %d] Build already in progress. Skipping concurrent trigger.", projectID)
+		return nil
+	}
+
 	log.Printf("[Project %d] Starting build pipeline...", projectID)
 	settings := LoadSettings(cfg.DataDir)
 	// 1. Fetch project details
 	var name, repoURL, branch, imageName, customTagsStr, registryOverride string
-	err := db.QueryRow("SELECT name, repo_url, branch, image_name, COALESCE(custom_tags, ''), COALESCE(registry_override, '') FROM projects WHERE id = ?", projectID).
+	err = db.QueryRow("SELECT name, repo_url, branch, image_name, COALESCE(custom_tags, ''), COALESCE(registry_override, '') FROM projects WHERE id = ?", projectID).
 		Scan(&name, &repoURL, &branch, &imageName, &customTagsStr, &registryOverride)
 	if err != nil {
 		return fmt.Errorf("failed to fetch project: %v", err)
@@ -33,7 +41,7 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 		Scan(&currentVersion, &lastCommit, &nextBump)
 
 	// Create temp workspace
-	workDir, err := os.MkdirTemp("", fmt.Sprintf("shiper-build-%d-*", projectID))
+	workDir, err := os.MkdirTemp("", fmt.Sprintf("shipper-build-%d-*", projectID))
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %v", err)
 	}
@@ -78,7 +86,7 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 		}
 	}
 	
-	tags := GenerateTags(imageName, newVersion, commitHash, []string{})
+	tags := GenerateTags(imageName, newVersion, commitHash, customTags)
 
 	// Record start
 	buildID := recordBuildStart(db, projectID, newVersion, commitHash)
@@ -110,10 +118,17 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 	status := "success"
 	if buildErr != nil {
 		status = "failed"
-		os.WriteFile(logsPath, []byte(fmt.Sprintf("\n--- SYSTEM ERROR ---\n%v", buildErr)), os.ModeAppend|0666)
+		// SAFELY APPEND the error instead of truncating!
+		f, _ := os.OpenFile(logsPath, os.O_APPEND|os.O_WRONLY, 0666)
+		if f != nil {
+			f.Write([]byte(fmt.Sprintf("\n\n--- SYSTEM ERROR ---\n%v\n", buildErr)))
+			f.Close()
+		}
 	} else {
 		updateState(db, projectID, newVersion, commitHash)
-		db.Exec("UPDATE state SET next_bump = 'patch' WHERE project_id = ?", projectID) // Reset bump
+		db.Exec("UPDATE state SET next_bump = 'patch' WHERE project_id = ?", projectID)
+
+		// Save tags to DB so they show up in UI
 		for _, fullTag := range tags {
 			parts := strings.Split(fullTag, ":")
 			if len(parts) >= 2 {
