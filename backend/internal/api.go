@@ -30,6 +30,8 @@ func NewServer(db *sql.DB, cfg Config) *Server {
 func (s *Server) SetupRoutes() *http.ServeMux {
 	mux := http.NewServeMux()
 
+	mux.HandleFunc("GET /api/events", HandleSSE)
+
 	// Project Management
 	mux.HandleFunc("GET /api/projects", s.handleGetProjects)
 	mux.HandleFunc("POST /api/projects", s.handleAddProject)

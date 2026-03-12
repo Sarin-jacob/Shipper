@@ -3,11 +3,12 @@ package internal
 
 import (
 	"fmt"
+	"io"
 	"os/exec"
 )
 
 // RunBuildx executes the Docker buildx command in the specified directory
-func RunBuildx(workDir, dockerfile, context string, tags []string, push bool) (string, error) {
+func RunBuildx(workDir, dockerfile, context string, tags []string, push bool, out io.Writer) (error) {
 	args := []string{"buildx", "build"}
 
 	// Specify the Dockerfile relative to the context
@@ -33,12 +34,10 @@ func RunBuildx(workDir, dockerfile, context string, tags []string, push bool) (s
 	cmd.Dir = workDir
 
 	// Capture CombinedOutput for the logs
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return string(output), fmt.Errorf("build failed: %v", err)
-	}
+	cmd.Stdout = out
+	cmd.Stderr = out
 
-	return string(output), nil
+	return nil
 }
 
 // TagExistingImage uses buildx imagetools to alias an existing image in the remote registry
