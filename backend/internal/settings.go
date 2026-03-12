@@ -17,10 +17,10 @@ type RegistryAuth struct {
 }
 
 type GlobalSettings struct {
-	PollInterval    string         `yaml:"poll_interval"`
-	RetentionPolicy string         `yaml:"retention_policy"`
-	GHToken         string         `yaml:"gh_token"`
-	Registries      []RegistryAuth `yaml:"registries"` 
+	PollInterval    string         `yaml:"poll_interval" json:"poll_interval"`
+	RetentionPolicy string         `yaml:"retention_policy" json:"retention_policy"`
+	GHToken         string         `yaml:"gh_token" json:"gh_token"`
+	Registries      []RegistryAuth `yaml:"registries" json:"registries"`
 }
 
 // LoadSettings reads the YAML file from the data directory

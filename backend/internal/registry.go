@@ -64,7 +64,12 @@ func ApplyRetentionPolicy(db *sql.DB, projectID int, registryURL, repository str
 
 func deleteRegistryTag(registryURL, repository, tag string) error {
 	client := &http.Client{}
-	url := fmt.Sprintf("https://%s/v2/%s/manifests/%s", registryURL, repository, tag)
+	repoName := repository
+	prefix := registryURL + "/"
+	if strings.HasPrefix(repoName, prefix) {
+		repoName = strings.TrimPrefix(repoName, prefix)
+	}
+	url := fmt.Sprintf("https://%s/v2/%s/manifests/%s", registryURL, repoName, tag)
 	
 	req, err := http.NewRequest("HEAD", url, nil)
 	if err != nil {
@@ -87,7 +92,7 @@ func deleteRegistryTag(registryURL, repository, tag string) error {
 		return fmt.Errorf("no digest header returned")
 	}
 
-	deleteUrl := fmt.Sprintf("https://%s/v2/%s/manifests/%s", registryURL, repository, digest)
+	deleteUrl := fmt.Sprintf("https://%s/v2/%s/manifests/%s", registryURL, repoName, digest)
 	delReq, _ := http.NewRequest("DELETE", deleteUrl, nil)
 	
 	delResp, err := client.Do(delReq)
