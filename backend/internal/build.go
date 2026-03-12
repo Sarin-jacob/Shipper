@@ -43,6 +43,10 @@ func RunBuildx(workDir, dockerfile, context string, tags []string, push bool, ou
 	cmd.Stdout = out
 	cmd.Stderr = out
 
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("build failed: %v", err)
+	}
+
 	return nil
 }
 
