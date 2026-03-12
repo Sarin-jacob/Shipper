@@ -52,16 +52,16 @@ const dom = {
 };
 
 // State
-let isPolling = false;
 let currentProjectId;
 let currentBuildId;
 let globalProjects = [];
+let logStreamInterval;
 
 async function init() {
     bindEvents();
     await fetchGlobalSettings();
     fetchProjects();
-    startPolling();
+    setupSSE();
 }
 
 function bindEvents() {
@@ -94,11 +94,20 @@ function bindEvents() {
     }
 }
 
-function startPolling() {
-    if (isPolling) return;
-    isPolling = true;
-    // Poll every 3 seconds to update statuses
-    setInterval(fetchProjects, 5000);
+function setupSSE() {
+    const evtSource = new EventSource(`${API_BASE}/events`);
+    
+    evtSource.onmessage = (event) => {
+        if (event.data === "update") {
+            console.log("Backend triggered an update!");
+            fetchProjects(); // Instantly refresh UI without waiting
+        }
+    };
+
+    evtSource.onerror = () => {
+        console.error("SSE connection lost. Reconnecting...");
+        // EventSource auto-reconnects natively, no extra code needed!
+    };
 }
 
 // --- UI Actions ---
@@ -114,6 +123,7 @@ function closeModal() {
 }
 
 window.closeModals = () => {
+    clearInterval(logStreamInterval);
     if(dom.backdrop) dom.backdrop.classList.add('hidden');
     if(dom.buildsModal) dom.buildsModal.classList.add('hidden');
     if(dom.settingsModal) dom.settingsModal.classList.add('hidden');
@@ -286,15 +296,36 @@ async function openBuildsModal(projectId) {
         const res = await fetch(`${API_BASE}/projects/${projectId}/builds`);
         const builds = await res.json();
 
-        dom.buildList.innerHTML = builds.map(b => `
-            <div onclick="fetchLogs(${b.id})" class="p-3 mb-2 bg-gray-900 rounded border border-gray-700 cursor-pointer hover:border-gray-500 transition">
+        // Segregate Active vs Archived
+        const active = builds.filter(b => b.status !== 'archived');
+        const archived = builds.filter(b => b.status === 'archived');
+
+        const renderItem = (b) => `
+            <div onclick="fetchLogs(${b.id}, '${b.status}')" class="p-3 mb-2 ${b.status === 'archived' ? 'bg-gray-800/50' : 'bg-gray-900'} rounded border border-gray-700 cursor-pointer hover:border-gray-500 transition">
                 <div class="flex justify-between items-center mb-1">
-                    <span class="font-mono text-sm text-blue-400">${b.version}</span>
-                    <span class="text-xs ${b.status === 'success' ? 'text-green-400' : b.status === 'failed' ? 'text-red-400' : 'text-blue-400'}">${b.status}</span>
+                    <span class="font-mono text-sm ${b.status === 'archived' ? 'text-gray-500' : 'text-blue-400'}">${b.version}</span>
+                    <span class="text-xs ${b.status === 'success' ? 'text-green-400' : b.status === 'failed' ? 'text-red-400' : b.status === 'archived' ? 'text-gray-500' : 'text-blue-400 animate-pulse'}">${b.status}</span>
                 </div>
                 <div class="text-xs text-gray-500 font-mono">Commit: ${b.commit_hash.substring(0,7)}</div>
-            </div>
-        `).join('');
+            </div>`;
+
+        let html = active.map(renderItem).join('');
+
+        // Wrap archived in a native HTML details tag
+        if (archived.length > 0) {
+            html += `
+            <details class="mt-4 group">
+                <summary class="text-xs text-gray-500 cursor-pointer hover:text-gray-300 py-2 select-none flex items-center gap-1 border-t border-gray-700 pt-3">
+                    <span class="transform group-open:rotate-90 transition-transform text-[10px]">></span>
+                    Archived Builds (${archived.length})
+                </summary>
+                <div class="mt-2 space-y-2 pl-2 border-l border-gray-700">
+                    ${archived.map(renderItem).join('')}
+                </div>
+            </details>`;
+        }
+
+        dom.buildList.innerHTML = html;
     } catch(e) {
         dom.buildList.innerHTML = `<div class="text-red-400 text-sm">Failed to load builds</div>`;
     }
@@ -332,21 +363,50 @@ window.deleteBuildTag = async (tag) => {
     }
 };
 
-window.fetchLogs = async (buildId) => {
+window.fetchLogs = async (buildId, status) => {
     currentBuildId = buildId;
-    dom.logViewer.textContent = "Loading logs...";
+    dom.logViewer.textContent = "Connecting to log stream...";
     dom.buildControls.classList.remove('hidden');
     dom.newBuildTag.value = ''; 
-    
-    fetchBuildTags(buildId); // NEW: Load tags when opening logs
+    fetchBuildTags(buildId);
 
-    try {
-        const res = await fetch(`${API_BASE}/builds/${buildId}/logs`);
-        if (!res.ok) throw new Error("Logs not found");
-        dom.logViewer.textContent = await res.text();
-        dom.logViewer.scrollTop = dom.logViewer.scrollHeight; 
-    } catch (e) {
-        dom.logViewer.textContent = "Logs not available for this build.";
+    // Clear any existing stream
+    clearInterval(logStreamInterval);
+
+    const loadLogText = async () => {
+        try {
+            const res = await fetch(`${API_BASE}/builds/${buildId}/logs`);
+            if (!res.ok) throw new Error("Logs not found");
+            const text = await res.text();
+            
+            // Auto-scroll logic: only snap to bottom if we are already near it
+            const viewer = dom.logViewer;
+            const isScrolledToBottom = viewer.scrollHeight - viewer.clientHeight <= viewer.scrollTop + 50;
+            
+            viewer.textContent = text || "Waiting for container output...";
+            
+            if (isScrolledToBottom || status === 'building') {
+                viewer.scrollTop = viewer.scrollHeight;
+            }
+        } catch (e) {
+            dom.logViewer.textContent = "Logs not available yet.";
+        }
+    };
+
+    await loadLogText(); // Load immediately
+
+    // --- LIVE LOG STREAMING ---
+    if (status === 'building') {
+        logStreamInterval = setInterval(async () => {
+            await loadLogText();
+            
+            // Check if the build finished globally to stop the stream
+            const proj = globalProjects.find(p => p.id == currentProjectId);
+            if (proj && proj.status !== 'building') {
+                clearInterval(logStreamInterval);
+                openBuildsModal(currentProjectId); // Refresh list to show 'success'/'failed'
+            }
+        }, 1500); // Fetch new log lines every 1.5s
     }
 };
 

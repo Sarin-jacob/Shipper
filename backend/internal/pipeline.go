@@ -81,16 +81,31 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 
 	// Record start
 	buildID := recordBuildStart(db, projectID, newVersion, commitHash)
+	BroadcastEvent("update")
 
 	// Execute Build
 	log.Printf("[Project %d] Building %s context (%s)...", projectID, target.Type, target.File)
-	logs, buildErr := RunBuildx(workDir, target.Dockerfile, target.Context, tags, true)
+	logDir := filepath.Join(cfg.DataDir, "logs", fmt.Sprintf("project_%d", projectID))
+	os.MkdirAll(logDir, os.ModePerm)
+	logsPath := filepath.Join(logDir, fmt.Sprintf("build_%d.log", buildID))
 
-	// Finalize
-	logsPath := saveLogs(cfg.DataDir, projectID, buildID, logs)
+	logFile, err := os.Create(logsPath)
+	if err != nil {
+		return fmt.Errorf("failed to create log file: %v", err)
+	}
+
+	db.Exec(`UPDATE builds SET logs_path = ? WHERE id = ?`, logsPath, buildID)
+
+	// Execute Build (Pass the logFile stream)
+	log.Printf("[Project %d] Building %s context (%s)...", projectID, target.Type, target.File)
+	buildErr := RunBuildx(workDir, target.Dockerfile, target.Context, tags, true, logFile)
+	
+	logFile.Close()
+
 	status := "success"
 	if buildErr != nil {
 		status = "failed"
+		os.WriteFile(logsPath, []byte(fmt.Sprintf("\n--- SYSTEM ERROR ---\n%v", buildErr)), os.ModeAppend|0666)
 	} else {
 		updateState(db, projectID, newVersion, commitHash)
 		db.Exec("UPDATE state SET next_bump = 'patch' WHERE project_id = ?", projectID) // Reset bump
@@ -105,7 +120,8 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 		}()
 	}
 
-	recordBuildFinish(db, buildID, status, logsPath)
+	recordBuildFinish(db, buildID, status)
+	BroadcastEvent("update")
 	return buildErr
 }
 
@@ -131,8 +147,8 @@ func recordBuildStart(db *sql.DB, projectID int, version, commit string) int64 {
 	return id
 }
 
-func recordBuildFinish(db *sql.DB, buildID int64, status, logsPath string) {
-	db.Exec(`UPDATE builds SET status = ?, finished_at = ?, logs_path = ? WHERE id = ?`, status, time.Now(), logsPath, buildID)
+func recordBuildFinish(db *sql.DB, buildID int64, status string) {
+	db.Exec(`UPDATE builds SET status = ?, finished_at = ? WHERE id = ?`, status, time.Now(), buildID)
 }
 
 func updateState(db *sql.DB, projectID int, version, commit string) {
