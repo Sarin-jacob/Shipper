@@ -62,11 +62,12 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 
 	// Calculate Version
 	var newVersion string
-	if nextBump == "major" {
+	switch nextBump {
+	case "major":
 		newVersion, _ = BumpMajor(currentVersion)
-	} else if nextBump == "minor" {
+	case "minor":
 		newVersion, _ = BumpMinor(currentVersion)
-	} else {
+	default:
 		newVersion, _ = IncrementPatch(currentVersion)
 	}
 
@@ -96,6 +97,10 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 
 	db.Exec(`UPDATE builds SET logs_path = ? WHERE id = ?`, logsPath, buildID)
 
+	logFile.Write([]byte(fmt.Sprintf("Starting Shipper Build Pipeline for %s...\n", name)))
+	logFile.Write([]byte(fmt.Sprintf("Commit: %s | Target Version: %s\n", commitHash[:7], newVersion)))
+	logFile.Write([]byte("---------------------------------------------------\n"))
+
 	// Execute Build (Pass the logFile stream)
 	log.Printf("[Project %d] Building %s context (%s)...", projectID, target.Type, target.File)
 	buildErr := RunBuildx(workDir, target.Dockerfile, target.Context, tags, true, logFile)
@@ -109,7 +114,12 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 	} else {
 		updateState(db, projectID, newVersion, commitHash)
 		db.Exec("UPDATE state SET next_bump = 'patch' WHERE project_id = ?", projectID) // Reset bump
-		
+		for _, fullTag := range tags {
+			parts := strings.Split(fullTag, ":")
+			if len(parts) >= 2 {
+				db.Exec("INSERT INTO tags (build_id, tag) VALUES (?, ?)", buildID, parts[len(parts)-1])
+			}
+		}
 		// Run retention policy asynchronously
 		go func() {
 			allVersions := fetchAllVersions(db, projectID)

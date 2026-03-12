@@ -11,6 +11,8 @@ import (
 func RunBuildx(workDir, dockerfile, context string, tags []string, push bool, out io.Writer) (error) {
 	args := []string{"buildx", "build"}
 
+	args = append(args, "--progress=plain")
+
 	// Specify the Dockerfile relative to the context
 	if dockerfile != "" && dockerfile != "Dockerfile" {
 		args = append(args, "-f", dockerfile)

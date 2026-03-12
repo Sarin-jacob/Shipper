@@ -370,7 +370,6 @@ window.fetchLogs = async (buildId, status) => {
     dom.newBuildTag.value = ''; 
     fetchBuildTags(buildId);
 
-    // Clear any existing stream
     clearInterval(logStreamInterval);
 
     const loadLogText = async () => {
@@ -379,11 +378,11 @@ window.fetchLogs = async (buildId, status) => {
             if (!res.ok) throw new Error("Logs not found");
             const text = await res.text();
             
-            // Auto-scroll logic: only snap to bottom if we are already near it
             const viewer = dom.logViewer;
             const isScrolledToBottom = viewer.scrollHeight - viewer.clientHeight <= viewer.scrollTop + 50;
             
-            viewer.textContent = text || "Waiting for container output...";
+            // Updated fallback string
+            viewer.textContent = text || "Log file created. Waiting for Docker daemon output...";
             
             if (isScrolledToBottom || status === 'building') {
                 viewer.scrollTop = viewer.scrollHeight;
@@ -393,20 +392,22 @@ window.fetchLogs = async (buildId, status) => {
         }
     };
 
-    await loadLogText(); // Load immediately
+    await loadLogText();
 
-    // --- LIVE LOG STREAMING ---
     if (status === 'building') {
         logStreamInterval = setInterval(async () => {
             await loadLogText();
             
-            // Check if the build finished globally to stop the stream
-            const proj = globalProjects.find(p => p.id == currentProjectId);
-            if (proj && proj.status !== 'building') {
+            // Re-fetch project to check if status changed from 'building'
+            const projRes = await fetch(`${API_BASE}/projects/${currentProjectId}/builds`);
+            const builds = await projRes.json();
+            const currentBuild = builds.find(b => b.id === buildId);
+            
+            if (currentBuild && currentBuild.status !== 'building') {
                 clearInterval(logStreamInterval);
-                openBuildsModal(currentProjectId); // Refresh list to show 'success'/'failed'
+                openBuildsModal(currentProjectId); // Refresh the UI to show 'success' or 'failed'
             }
-        }, 1500); // Fetch new log lines every 1.5s
+        }, 1500);
     }
 };
 
