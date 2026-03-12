@@ -473,7 +473,6 @@ async function deleteBuild(buildId) {
 
 
 // --- API Interactions ---
-
 async function fetchProjects() {
     try {
         const res = await fetch(`${API_BASE}/projects`);
