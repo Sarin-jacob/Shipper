@@ -56,6 +56,7 @@ func ApplyRetentionPolicy(db *sql.DB, projectID int, registryURL, repository str
 
 			// Sync the Database! Change status so UI knows it was cleaned up
 			db.Exec("UPDATE builds SET status = 'archived' WHERE version = ? AND project_id = ?", v, projectID)
+			db.Exec("DELETE FROM tags WHERE build_id = (SELECT id FROM builds WHERE version = ? AND project_id = ?)", v, projectID)
 		}
 	}
 

@@ -139,6 +139,8 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 		updateState(db, projectID, newVersion, commitHash)
 		db.Exec("UPDATE state SET next_bump = 'patch' WHERE project_id = ?", projectID)
 
+		db.Exec("DELETE FROM tags WHERE tag = 'latest' AND build_id IN (SELECT id FROM builds WHERE project_id = ?)", projectID)
+
 		// Save tags to DB so they show up in UI
 		for _, fullTag := range tags {
 			parts := strings.Split(fullTag, ":")

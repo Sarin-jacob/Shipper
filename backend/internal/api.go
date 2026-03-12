@@ -10,6 +10,8 @@ import (
 	"os"
 	"strconv"
 	"fmt"
+	"os/exec"
+	"path/filepath"
 )
 
 // Server holds the database connection and configuration
@@ -435,12 +437,35 @@ func (s *Server) handleDeleteBuildTag(w http.ResponseWriter, r *http.Request) {
 	tag := r.PathValue("tag")
 
 	var imageName string
-	s.db.QueryRow("SELECT p.image_name FROM projects p JOIN builds b ON p.id = b.project_id WHERE b.id = ?", buildID).Scan(&imageName)
+	err := s.db.QueryRow("SELECT p.image_name FROM projects p JOIN builds b ON p.id = b.project_id WHERE b.id = ?", buildID).Scan(&imageName)
+	if err != nil || imageName == "" {
+		http.Error(w, "Build not found", http.StatusNotFound)
+		return
+	}
 
-	// 1. Attempt to delete from the OCI registry (we ignore the error in case it was already deleted manually)
+	// --- 1. THE DUMMY IMAGE HACK ---
+	// Create a temporary directory with an empty Dockerfile
+	tmpDir, _ := os.MkdirTemp("", "shipper-dummy-*")
+	defer os.RemoveAll(tmpDir)
+	os.WriteFile(filepath.Join(tmpDir, "Dockerfile"), []byte("FROM scratch\nLABEL maintainer=\"shipper-cleanup\""), 0644)
+
+	dummyImageTag := fmt.Sprintf("%s:%s", imageName, tag)
+
+	// Build and push the empty image to steal the tag pointer away from the real build
+	cmd := exec.Command("docker", "buildx", "build", "--push", "-t", dummyImageTag, ".")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		log.Printf("Failed to push dummy image for untagging: %v", err)
+	}
+
+	// --- 2. DELETE THE DUMMY DIGEST ---
+	// deleteRegistryTag will now target the useless dummy image, leaving your real build safe!
 	_ = deleteRegistryTag(s.cfg.RegistryURL, imageName, tag)
 
-	// 2. Delete from our SQLite Database
+	// 3. Delete from our SQLite Database
 	s.db.Exec("DELETE FROM tags WHERE build_id = ? AND tag = ?", buildID, tag)
+	
+	// Tell the UI to refresh
+	BroadcastEvent("update")
 	w.WriteHeader(http.StatusOK)
 }
