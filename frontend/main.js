@@ -367,6 +367,12 @@ window.fetchLogs = async (buildId, status) => {
     currentBuildId = buildId;
     dom.logViewer.textContent = "Connecting to log stream...";
     dom.buildControls.classList.remove('hidden');
+    console.log(status);
+    if (status==='success'){ 
+        dom.btnDeleteBuild.classList.remove("hidden");
+    }else{
+        dom.btnDeleteBuild.classList.add("hidden");
+    }
     dom.newBuildTag.value = ''; 
     fetchBuildTags(buildId);
 
