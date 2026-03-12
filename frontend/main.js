@@ -407,7 +407,7 @@ window.fetchLogs = async (buildId, status) => {
             
             if (currentBuild && currentBuild.status !== 'building') {
                 clearInterval(logStreamInterval);
-                openBuildsModal(currentProjectId); // Refresh the UI to show 'success' or 'failed'
+                openBuildsModal(currentProjectId);
             }
         }, 1500);
     }
