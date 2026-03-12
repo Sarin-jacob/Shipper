@@ -304,8 +304,12 @@ func (s *Server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
 		DockerLogin(payload.Registries[i])
 	}
 
-	SaveSettings(s.cfg.DataDir, payload)
-	w.WriteHeader(http.StatusOK)
+	err := SaveSettings(s.cfg.DataDir, payload)
+	if err==nil{
+		w.WriteHeader(http.StatusOK)
+	} else{
+		http.Error(w, "Setting not Save", http.StatusInternalServerError)
+	}
 }
 
 func (s *Server) handleProjectBump(w http.ResponseWriter, r *http.Request) {
