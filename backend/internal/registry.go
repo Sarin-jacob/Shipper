@@ -66,8 +66,8 @@ func deleteRegistryTag(registryURL, repository, tag string) error {
 	client := &http.Client{}
 	repoName := repository
 	prefix := registryURL + "/"
-	if strings.HasPrefix(repoName, prefix) {
-		repoName = strings.TrimPrefix(repoName, prefix)
+	if after, ok :=strings.CutPrefix(repoName, prefix); ok  {
+		repoName = after
 	}
 	url := fmt.Sprintf("https://%s/v2/%s/manifests/%s", registryURL, repoName, tag)
 	
