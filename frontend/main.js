@@ -176,7 +176,7 @@ function openSettingsModal(projectId) {
 }
 
 function openGlobalSettings() {
-    fetchGlobalSettings(); // Refresh before opening
+    fetchGlobalSettings();
     dom.backdrop.classList.remove('hidden');
     dom.globalSettingsModal.classList.remove('hidden');
 }
