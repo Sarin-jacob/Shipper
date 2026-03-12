@@ -529,7 +529,6 @@ async function triggerBuild(id) {
 }
 
 // --- Rendering ---
-
 function renderProjects(projects) {
     if (!projects || projects.length === 0) {
         dom.projectsContainer.innerHTML = `
