@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strings"
 )
 
 // RunBuildx executes the Docker buildx command in the specified directory
@@ -31,6 +32,9 @@ func RunBuildx(workDir, dockerfile, context string, tags []string, push bool, ou
 		context = "."
 	}
 	args = append(args, context)
+	
+	cmdString := fmt.Sprintf("docker %s\n", strings.Join(args, " "))
+	out.Write([]byte(fmt.Sprintf("\n EXEC: %s\n", cmdString)))
 
 	cmd := exec.Command("docker", args...)
 	cmd.Dir = workDir

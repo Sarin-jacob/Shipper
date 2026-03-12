@@ -9,23 +9,34 @@ import (
 	"path/filepath"
 	"time"
 	"strings"
+	"sync"
 )
+
+var buildLocks sync.Map
 
 // ExecuteBuild runs the full CI/CD pipeline
 func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 	// --- ANTI-RACE CONDITION LOCK ---
-	var isBuilding bool
-	err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM builds WHERE project_id = ? AND status = 'building')", projectID).Scan(&isBuilding)
-	if err == nil && isBuilding {
-		log.Printf("[Project %d] Build already in progress. Skipping concurrent trigger.", projectID)
+	// var isBuilding bool
+	// err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM builds WHERE project_id = ? AND status = 'building')", projectID).Scan(&isBuilding)
+	// if err == nil && isBuilding {
+	// 	log.Printf("[Project %d] Build already in progress. Skipping concurrent trigger.", projectID)
+	// 	return nil
+	// }
+	lockObj, _ := buildLocks.LoadOrStore(projectID, &sync.Mutex{})
+	mutex := lockObj.(*sync.Mutex)
+
+	if !mutex.TryLock() {
+		log.Printf("[Project %d] Build already in progress. Ignoring duplicate trigger.", projectID)
 		return nil
 	}
+	defer mutex.Unlock()
 
 	log.Printf("[Project %d] Starting build pipeline...", projectID)
 	settings := LoadSettings(cfg.DataDir)
 	// 1. Fetch project details
 	var name, repoURL, branch, imageName, customTagsStr, registryOverride string
-	err = db.QueryRow("SELECT name, repo_url, branch, image_name, COALESCE(custom_tags, ''), COALESCE(registry_override, '') FROM projects WHERE id = ?", projectID).
+	err := db.QueryRow("SELECT name, repo_url, branch, image_name, COALESCE(custom_tags, ''), COALESCE(registry_override, '') FROM projects WHERE id = ?", projectID).
 		Scan(&name, &repoURL, &branch, &imageName, &customTagsStr, &registryOverride)
 	if err != nil {
 		return fmt.Errorf("failed to fetch project: %v", err)
