@@ -169,12 +169,8 @@ function openSettingsModal(projectId) {
     
     dom.editProjectId.value = projectId;
     dom.editRepo.value = project ? project.repo_url : '';
-    dom.editBranch.value = project ? project.branch : '';
-    
-    // In a full implementation, you'd fetch the existing tags from the DB.
-    // For now, we leave it blank for user input.
+    dom.editBranch.value = project ? project.branch : '';    
     dom.editTags.value = ''; 
-    
     dom.backdrop.classList.remove('hidden');
     dom.settingsModal.classList.remove('hidden');
 }
