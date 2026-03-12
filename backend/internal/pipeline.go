@@ -148,6 +148,12 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 				db.Exec("INSERT INTO tags (build_id, tag) VALUES (?, ?)", buildID, parts[len(parts)-1])
 			}
 		}
+	}
+
+	recordBuildFinish(db, buildID, status)
+	BroadcastEvent("update")
+
+	if status == "success"{
 		// Run retention policy asynchronously
 		go func() {
 			allVersions := fetchAllVersions(db, projectID)
@@ -158,8 +164,6 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 		}()
 	}
 
-	recordBuildFinish(db, buildID, status)
-	BroadcastEvent("update")
 	return buildErr
 }
 
