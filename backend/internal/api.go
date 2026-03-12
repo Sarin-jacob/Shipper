@@ -227,17 +227,32 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteBuild(w http.ResponseWriter, r *http.Request) {
 	buildID := r.PathValue("id")
 
-	// 1. Fetch log path and delete the file
-	var logsPath string
-	s.db.QueryRow("SELECT logs_path FROM builds WHERE id = ?", buildID).Scan(&logsPath)
-	if logsPath != "" {
-		os.Remove(logsPath)
+	// 1. Fetch log path, version, and image name
+	var logsPath, version, imageName string
+	err := s.db.QueryRow(`
+		SELECT b.logs_path, b.version, p.image_name 
+		FROM builds b JOIN projects p ON b.project_id = p.id 
+		WHERE b.id = ?`, buildID).Scan(&logsPath, &version, &imageName)
+
+	if err == nil {
+		delErr := deleteRegistryTag(s.cfg.RegistryURL, imageName, version)
+		if delErr != nil {
+			log.Printf("Note: Failed to delete build %s from registry (may already be deleted): %v", version, delErr)
+		} else {
+			// Trigger GC in the background to physically free up the hard drive
+			go RunGarbageCollection(s.cfg.RegistryContainer)
+		}
+
+		// 3. Delete the physical log file
+		if logsPath != "" {
+			os.Remove(logsPath)
+		}
 	}
 
-	// 2. Delete from DB
 	s.db.Exec("DELETE FROM tags WHERE build_id = ?", buildID)
 	s.db.Exec("DELETE FROM builds WHERE id = ?", buildID)
 
+	BroadcastEvent("update") 
 	w.WriteHeader(http.StatusOK)
 }
 
