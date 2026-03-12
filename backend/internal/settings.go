@@ -52,7 +52,7 @@ func SaveSettings(dataDir string, settings GlobalSettings) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0600) // 0600 ensures only the shipper user can read the token
+	return os.WriteFile(path, data, 0644) // 0600 ensures only the shipper user can read the token
 }
 
 // InjectGHToken safely adds the token to a GitHub URL for cloning
