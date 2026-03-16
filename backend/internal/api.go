@@ -410,8 +410,17 @@ func (s *Server) handlePushBuild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	settings := LoadSettings(s.cfg.DataDir)
+	var nameSpace string 
+	for _, i := range settings.Registries{
+		if i.URL == payload.Registry{
+			nameSpace = i.Username
+			break
+		}
+	}
+
 	sourceImage := fmt.Sprintf("%s:%s", sourceImageName, version)
-	targetImage := fmt.Sprintf("%s/%s:%s", payload.Registry, projectName, version)
+	targetImage := fmt.Sprintf("%s/%s/%s:%s", payload.Registry, nameSpace, projectName, version)
 
 	// Instantly copy the manifest across registries!
 	if err := TagExistingImage(sourceImage, targetImage); err != nil {
