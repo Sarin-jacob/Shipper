@@ -421,10 +421,16 @@ func (s *Server) handlePushBuild(w http.ResponseWriter, r *http.Request) {
 
 	sourceImage := fmt.Sprintf("%s:%s", sourceImageName, version)
 	targetImage := fmt.Sprintf("%s/%s/%s:%s", payload.Registry, nameSpace, projectName, version)
+	targetLatest := fmt.Sprintf("%s/%s/%s:latest", payload.Registry, nameSpace, projectName)
 
 	// Instantly copy the manifest across registries!
 	if err := TagExistingImage(sourceImage, targetImage); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := TagExistingImage(sourceImage, targetLatest); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to push latest tag: %v", err), http.StatusInternalServerError)
 		return
 	}
 
