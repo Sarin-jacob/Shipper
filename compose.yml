@@ -1,6 +1,6 @@
 services:
   shipper:
-    image: oci.jell0.online/shipper:latest
+    image: sarinjacob/shipper:latest
     build:
       context: .
       dockerfile: Dockerfile
@@ -12,7 +12,7 @@ services:
       - "8080:8080"
     environment:
       - SHIPPER_PORT=8080
-      - SHIPPER_REGISTRY=oci.jell0.online
+      - SHIPPER_REGISTRY=localhost:5000
       # Adjust this if you want to poll faster/slower
       - SHIPPER_POLL_INTERVAL=1h 
       # Since you sometimes use CEST for alarms, you can force the container timezone here if needed:

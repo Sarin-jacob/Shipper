@@ -50,6 +50,8 @@ ENV SHIPPER_DATA_DIR=/app/data
 ENV SHIPPER_DB_PATH=/app/data/shipper.db
 ENV SHIPPER_REGISTRY=localhost:5000
 
+LABEL org.opencontainers.image.source https://github.com/Sarin-jacob/Shipper
+
 # Create the data directory so SQLite has a place to write
 RUN mkdir -p /app/data
 

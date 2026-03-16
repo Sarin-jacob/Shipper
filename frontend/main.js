@@ -574,7 +574,7 @@ function renderProjects(projects) {
                     </div>
                     <div>
                         <h3 class="text-lg font-bold text-white tracking-tight">${p.name}</h3>
-                        <div class="text-xs text-gray-400 font-mono mt-0.5">${p.repo_url} <span class="text-gray-600 mx-1">|</span> <span class="text-blue-400">${p.branch}</span></div>
+                        <div class="text-xs text-gray-400 font-mono mt-0.5"><a href='${p.repo_url}' target='_blank'>${p.repo_url}</a> <span class="text-gray-600 mx-1">|</span> <span class="text-blue-400">${p.branch}</span></div>
                     </div>
                 </div>
                 <span class="px-2.5 py-0.5 rounded-full text-xs font-medium border flex items-center gap-1.5 ${statusClass} capitalize">
