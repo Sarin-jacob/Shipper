@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"fmt"
 
 	"gopkg.in/yaml.v3"
 )
@@ -70,4 +71,19 @@ func DockerLogin(registry RegistryAuth) error {
 	cmd := exec.Command("docker", "login", registry.URL, "-u", registry.Username, "--password-stdin")
 	cmd.Stdin = strings.NewReader(registry.Password)
 	return cmd.Run()
+}
+
+// AuthenticateAllRegistries reads the saved credentials and logs the host Docker daemon in on startup
+func AuthenticateAllRegistries(dataDir string) {
+	settings := LoadSettings(dataDir)
+	for _, reg := range settings.Registries {
+		if reg.Username != "" && reg.Password != "" {
+			fmt.Printf("Authenticating Docker daemon with %s...\n", reg.URL)
+			if err := DockerLogin(reg); err != nil {
+				fmt.Printf("Failed to authenticate with %s: %v\n", reg.URL, err)
+			} else {
+				fmt.Printf("Successfully authenticated with %s\n", reg.URL)
+			}
+		}
+	}
 }

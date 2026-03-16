@@ -64,6 +64,19 @@ async function init() {
     setupSSE();
 }
 
+// --- Utilities ---
+function formatTime(dateString) {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    // Formats to: "Mar 16, 2:30 PM"
+    return date.toLocaleString(undefined, { 
+        month: 'short', 
+        day: 'numeric', 
+        hour: 'numeric', 
+        minute: '2-digit' 
+    });
+}
+
 function bindEvents() {
     // Modal controls
     dom.btnOpenModal.addEventListener('click', openModal);
@@ -302,7 +315,10 @@ async function openBuildsModal(projectId) {
                     <span class="font-mono text-sm ${b.status === 'archived' ? 'text-gray-500' : 'text-blue-400'}">${b.version}</span>
                     <span class="text-xs ${b.status === 'success' ? 'text-green-400' : b.status === 'failed' ? 'text-red-400' : b.status === 'archived' ? 'text-gray-500' : 'text-blue-400 animate-pulse'}">${b.status}</span>
                 </div>
-                <div class="text-xs text-gray-500 font-mono">Commit: ${b.commit_hash.substring(0,7)}</div>
+                <div class="flex justify-between items-center text-xs text-gray-500">
+                <span class="font-mono">Commit: ${b.commit_hash.substring(0,7)}</span>
+                <span>${formatTime(b.finished_at)}</span>
+                </div>
             </div>`;
 
         let html = active.map(renderItem).join('');

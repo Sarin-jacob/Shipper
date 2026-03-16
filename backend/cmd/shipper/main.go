@@ -26,15 +26,18 @@ func main() {
 	}
 	defer db.Close()
 
-	// 4. Start Background Scheduler
+	// 4. Authenticate external registries
+	internal.AuthenticateAllRegistries(cfg.DataDir)
+
+	// 5. Start Background Scheduler
 	scheduler := internal.NewScheduler(db, cfg)
 	scheduler.Start()
 
-	// 5. Initialize API Server
+	// 6. Initialize API Server
 	server := internal.NewServer(db, cfg)
 	mux := server.SetupRoutes()
 
-	// 6. Start listening
+	// 7. Start listening
 	log.Printf("API Server running on port %s (Registry: %s)\n", cfg.Port, cfg.RegistryURL)
 	if err := http.ListenAndServe(":"+cfg.Port, mux); err != nil {
 		log.Fatalf("Server failed: %v", err)
