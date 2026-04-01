@@ -43,6 +43,7 @@ const dom = {
     btnGlobalSettings: document.getElementById('btn-global-settings'),
     globalSettingsModal: document.getElementById('global-settings-modal'),
     pushTargetRegistry: document.getElementById('push-target-registry'),
+    
     gs: {
         poll: document.getElementById('gs-poll'),
         retention: document.getElementById('gs-retention'),
