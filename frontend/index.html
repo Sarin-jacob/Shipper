@@ -109,7 +109,7 @@
       <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-md border border-gray-700">
         <div class="px-6 py-4 border-b border-gray-700 flex justify-between items-center">
           <h2 class="text-lg font-semibold text-white">Project Settings</h2>
-          <button onclick="closeModals()" class="text-gray-400 hover:text-white transition">&times;</button>
+          <button onclick="closeModals()" class="text-gray-400 text-2xl hover:text-white transition">&times;</button>
         </div>
         <div class="p-6 space-y-6">
           <input type="hidden" id="edit-project-id">
@@ -125,8 +125,11 @@
             </div>
           </div>
           <div class="bg-gray-900 p-4 rounded border border-gray-700">
+            <span class="flex justify-between mb-2">
             <h3 class="text-sm font-medium text-gray-300 mb-2">Version Control</h3>
-            <p class="text-xs text-gray-500 mb-3">Schedule a version jump for the next automated or manual build.</p>
+              <button id="force-rebuild-btn" class=" bg-gray-800 hover:bg-amber-600 hover:text-white text-gray-300 px-2 py-1 w-auto rounded text-xs transition border border-gray-600">Rebuild</button>
+            </span>
+          <p class="text-xs text-gray-500 mb-3">Schedule a version jump for the next automated or manual build.</p>
             <div class="flex gap-2">
               <button onclick="bumpVersion('minor')" class="flex-1 bg-gray-800 hover:bg-blue-600 hover:text-white text-gray-300 px-3 py-2 rounded text-sm transition border border-gray-600">Bump Minor</button>
               <button onclick="bumpVersion('major')" class="flex-1 bg-gray-800 hover:bg-purple-600 hover:text-white text-gray-300 px-3 py-2 rounded text-sm transition border border-gray-600">Bump Major</button>

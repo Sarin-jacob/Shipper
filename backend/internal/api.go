@@ -138,8 +138,14 @@ func (s *Server) handleTriggerBuild(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var payload struct {
+		NoCache bool `json:"no_cache"`
+	}
+	// We ignore the error here because a normal build request might not send a body at all!
+	json.NewDecoder(r.Body).Decode(&payload)
+
 	go func() {
-		if err := ExecuteBuild(s.db, s.cfg, projectID); err != nil {
+		if err := ExecuteBuild(s.db, s.cfg, projectID, payload.NoCache, payload.NoCache); err != nil {
 			log.Printf("Manual build failed for project %d: %v", projectID, err)
 		}
 	}()

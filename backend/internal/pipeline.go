@@ -15,7 +15,7 @@ import (
 var buildLocks sync.Map
 
 // ExecuteBuild runs the full CI/CD pipeline
-func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
+func ExecuteBuild(db *sql.DB, cfg Config, projectID int, isManual bool, noCache bool) error {
 	lockObj, _ := buildLocks.LoadOrStore(projectID, &sync.Mutex{})
 	mutex := lockObj.(*sync.Mutex)
 
@@ -59,7 +59,7 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 		return err
 	}
 
-	if commitHash == lastCommit {
+	if !isManual && commitHash == lastCommit {
 		log.Printf("[Project %d] Commit %s already built. Skipping.", projectID, commitHash[:7])
 		return nil
 	}
@@ -117,7 +117,7 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 				// Fire off background builds for the newly created projects!
 				if err == nil {
 					newProjID, _ := res.LastInsertId()
-					go ExecuteBuild(db, cfg, int(newProjID)) 
+					go ExecuteBuild(db, cfg, int(newProjID), false, false) 
 				}
 			}
 			BroadcastEvent("update") // Tell the UI about the new projects!
@@ -165,11 +165,14 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 	if activeTarget.ServiceName != "" {
 		logFile.Write([]byte(fmt.Sprintf("Target Service: %s\n", activeTarget.ServiceName)))
 	}
+	if noCache {
+		logFile.Write([]byte("WARNING: Cache disabled for this build (--no-cache)\n"))
+	}
 	logFile.Write([]byte("---------------------------------------------------\n"))
 
 	// Pass the context (like ./backend) to RunBuildx
 	log.Printf("[Project %d] Building %s context (%s)...", projectID, activeTarget.Type, activeTarget.File)
-	buildErr := RunBuildx(workDir, activeTarget.Dockerfile, activeTarget.Context, tags, true, logFile)
+	buildErr := RunBuildx(workDir, activeTarget.Dockerfile, activeTarget.Context, tags, true, noCache, logFile)
 	
 	logFile.Close()
 

@@ -10,13 +10,17 @@ import (
 )
 
 // RunBuildx executes the Docker buildx command in the specified directory
-func RunBuildx(workDir, dockerfile, context string, tags []string, push bool, out io.Writer) error {
+func RunBuildx(workDir, dockerfile, context string, tags []string, push bool, noCache bool, out io.Writer) error {
 	args := []string{"buildx", "build"}
 	args = append(args, "--progress=plain")
 
 	if dockerfile != "" && dockerfile != "Dockerfile" {
 		// Ensure Dockerfile path is absolute relative to the cloned git repo root
 		args = append(args, "-f", filepath.Join(workDir, dockerfile))
+	}
+
+	if noCache {
+		args = append(args, "--no-cache")
 	}
 
 	for _, tag := range tags {

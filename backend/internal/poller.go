@@ -69,7 +69,7 @@ func (s *Scheduler) pollProjects() {
 		if err == sql.ErrNoRows || remoteCommit != lastCommit {
 			log.Printf("[Project %d] Update detected! Triggering build.", id)
 			go func(projectID int) {
-				if err := ExecuteBuild(s.db, s.cfg, projectID); err != nil {
+				if err := ExecuteBuild(s.db, s.cfg, projectID, false, false); err != nil {
 					log.Printf("[Project %d] Automated build failed: %v", projectID, err)
 				}
 			}(id)

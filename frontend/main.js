@@ -43,6 +43,7 @@ const dom = {
     btnGlobalSettings: document.getElementById('btn-global-settings'),
     globalSettingsModal: document.getElementById('global-settings-modal'),
     pushTargetRegistry: document.getElementById('push-target-registry'),
+    rebuildButton: document.getElementById('force-rebuild-btn'),
     
     gs: {
         poll: document.getElementById('gs-poll'),
@@ -84,6 +85,7 @@ function bindEvents() {
     dom.btnCloseModal.addEventListener('click', closeModal);
     dom.btnCancelModal.addEventListener('click', closeModal);
     dom.btnGlobalSettings.addEventListener('click', openGlobalSettings);
+    dom.rebuildButton.addEventListener('click', () => triggerBuild(currentProjectId, true));
 
     // Form submission
     dom.form.addEventListener('submit', handleAddProject);
@@ -535,9 +537,12 @@ async function handleAddProject(e) {
     }
 }
 
-async function triggerBuild(id) {
+async function triggerBuild(id,noCache=false) {
     try {
-        const res = await fetch(`${API_BASE}/projects/${id}/build`, { method: 'POST' });
+        const res = await fetch(`${API_BASE}/projects/${id}/build`, { method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ no_cache: noCache }) });        
+        if (!dom.settingsModal.classList.contains('hidden')) closeModals    ();
         if (!res.ok) throw new Error('Failed to trigger build');
         fetchProjects(); 
     } catch (err) {
