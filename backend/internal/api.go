@@ -107,15 +107,14 @@ func (s *Server) handleAddProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Default image name based on registry and project name if not provided
 	if p.ImageName == "" {
 		p.ImageName = s.cfg.RegistryURL + "/" + p.Name
 	}
 
 	result, err := s.db.Exec(`
-		INSERT INTO projects (name, repo_url, branch, image_name, enabled, registry_override) 
-		VALUES (?, ?, ?, ?, ?, ?)`,
-		p.Name, p.RepoURL, p.Branch, p.ImageName, true, p.RegistryOverride, // Auto-enable for MVP
+		INSERT INTO projects (name, repo_url, branch, image_name, enabled, registry_override, service_name) 
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		p.Name, p.RepoURL, p.Branch, p.ImageName, true, p.RegistryOverride, p.ServiceName,
 	)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -211,11 +210,31 @@ func (s *Server) handleGetLogs(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 
-	// 1. Delete physical log files
+	// --- 1. THE NUCLEAR REGISTRY WIPE ---
+	var imageName string
+	err := s.db.QueryRow("SELECT image_name FROM projects WHERE id = ?", projectID).Scan(&imageName)
+	if err == nil && imageName != "" {
+		// Find every successful build version attached to this project
+		rows, err := s.db.Query("SELECT version FROM builds WHERE project_id = ? AND status = 'success'", projectID)
+		if err == nil {
+			defer rows.Close()
+			for rows.Next() {
+				var version string
+				if rows.Scan(&version) == nil {
+					// Vaporize the manifest from the OCI registry
+					deleteRegistryTag(s.cfg.RegistryURL, imageName, version)
+				}
+			}
+		}
+		// Trigger background GC to reclaim all the disk space immediately!
+		go RunGarbageCollection(s.cfg.RegistryContainer)
+	}
+
+	// --- 2. Delete physical log files ---
 	logDir := s.cfg.DataDir + "/logs/project_" + projectID
 	os.RemoveAll(logDir)
 
-	// 2. Delete from DB (Delete child rows first to avoid orphans)
+	// --- 3. Clean Database ---
 	s.db.Exec("DELETE FROM tags WHERE build_id IN (SELECT id FROM builds WHERE project_id = ?)", projectID)
 	s.db.Exec("DELETE FROM builds WHERE project_id = ?", projectID)
 	s.db.Exec("DELETE FROM state WHERE project_id = ?", projectID)
@@ -260,9 +279,9 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 	projectID := r.PathValue("id")
 	
 	var payload struct {
-		RepoURL    string `json:"repo_url"`
-		Branch     string `json:"branch"`
-		CustomTags string `json:"custom_tags"`
+		RepoURL       string `json:"repo_url"`
+		Branch        string `json:"branch"`
+		CustomTags    string `json:"custom_tags"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		http.Error(w, "Invalid payload", http.StatusBadRequest)

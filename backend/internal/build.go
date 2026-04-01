@@ -9,14 +9,13 @@ import (
 )
 
 // RunBuildx executes the Docker buildx command in the specified directory
-func RunBuildx(workDir, dockerfile, context string, tags []string, push bool, out io.Writer) (error) {
+func RunBuildx(workDir, dockerfile, context string, tags []string, push bool, out io.Writer) error {
 	args := []string{"buildx", "build"}
-
 	args = append(args, "--progress=plain")
 
-	// Specify the Dockerfile relative to the context
 	if dockerfile != "" && dockerfile != "Dockerfile" {
-		args = append(args, "-f", dockerfile)
+		// Ensure Dockerfile path is absolute relative to the cloned git repo root
+		args = append(args, "-f", filepath.Join(workDir, dockerfile))
 	}
 
 	for _, tag := range tags {
@@ -27,19 +26,16 @@ func RunBuildx(workDir, dockerfile, context string, tags []string, push bool, ou
 		args = append(args, "--push")
 	}
 
-	// Append the build context
 	if context == "" {
 		context = "."
 	}
 	args = append(args, context)
-	
+
 	cmdString := fmt.Sprintf("docker %s\n", strings.Join(args, " "))
-	out.Write([]byte(fmt.Sprintf("\n EXEC: %s\n", cmdString)))
+	out.Write([]byte(fmt.Sprintf("\nEXEC: %s\n", cmdString)))
 
 	cmd := exec.Command("docker", args...)
 	cmd.Dir = workDir
-
-	// Capture CombinedOutput for the logs
 	cmd.Stdout = out
 	cmd.Stderr = out
 

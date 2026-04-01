@@ -16,13 +16,6 @@ var buildLocks sync.Map
 
 // ExecuteBuild runs the full CI/CD pipeline
 func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
-	// --- ANTI-RACE CONDITION LOCK ---
-	// var isBuilding bool
-	// err := db.QueryRow("SELECT EXISTS(SELECT 1 FROM builds WHERE project_id = ? AND status = 'building')", projectID).Scan(&isBuilding)
-	// if err == nil && isBuilding {
-	// 	log.Printf("[Project %d] Build already in progress. Skipping concurrent trigger.", projectID)
-	// 	return nil
-	// }
 	lockObj, _ := buildLocks.LoadOrStore(projectID, &sync.Mutex{})
 	mutex := lockObj.(*sync.Mutex)
 
@@ -35,14 +28,13 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 	log.Printf("[Project %d] Starting build pipeline...", projectID)
 	settings := LoadSettings(cfg.DataDir)
 	// 1. Fetch project details
-	var name, repoURL, branch, imageName, customTagsStr, registryOverride string
-	err := db.QueryRow("SELECT name, repo_url, branch, image_name, COALESCE(custom_tags, ''), COALESCE(registry_override, '') FROM projects WHERE id = ?", projectID).
-		Scan(&name, &repoURL, &branch, &imageName, &customTagsStr, &registryOverride)
+	var name, repoURL, branch, imageName, customTagsStr, registryOverride, targetService string
+	err := db.QueryRow("SELECT name, repo_url, branch, image_name, COALESCE(custom_tags, ''), COALESCE(registry_override, ''), COALESCE(service_name, '') FROM projects WHERE id = ?", projectID).
+		Scan(&name, &repoURL, &branch, &imageName, &customTagsStr, &registryOverride, &targetService)
 	if err != nil {
 		return fmt.Errorf("failed to fetch project: %v", err)
 	}
 
-	// Override registry if set
 	if registryOverride != "" {
 		imageName = registryOverride + "/" + name
 	}
@@ -58,8 +50,7 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 	}
 	defer os.RemoveAll(workDir)
 
-	// Clone & Check Commit
-	if err := CloneRepo(repoURL, branch, workDir,settings.GHToken); err != nil {
+	if err := CloneRepo(repoURL, branch, workDir, settings.GHToken); err != nil {
 		return err
 	}
 
@@ -73,10 +64,64 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 		return nil
 	}
 
-	// Analyze Build Config (Compose vs Dockerfile)
-	target, err := AnalyzeRepo(workDir)
-	if err != nil {
+	// 2. Analyze Build Config (Now returns an ARRAY of targets)
+	targets, err := AnalyzeRepo(workDir)
+	if err != nil || len(targets) == 0 {
 		return fmt.Errorf("analysis failed: %v", err)
+	}
+
+	var activeTarget BuildTarget
+
+	// --- 3. THE AUTO-SPLIT LOGIC ---
+	if targetService != "" {
+		// This project already knows what service it's targeting
+		for _, t := range targets {
+			if t.ServiceName == targetService {
+				activeTarget = t
+				break
+			}
+		}
+		if activeTarget.Type == "" {
+			return fmt.Errorf("target service '%s' not found in repo", targetService)
+		}
+	} else {
+		// This is a fresh project with no target service defined yet
+		if len(targets) == 1 {
+			activeTarget = targets[0]
+			// Save the target service so we remember it next time
+			db.Exec("UPDATE projects SET service_name = ? WHERE id = ?", activeTarget.ServiceName, projectID)
+		} else {
+			log.Printf("[Project %d] Multiple services found. Auto-generating child projects...", projectID)
+			
+			originalName := name
+			originalImageName := imageName
+
+			// A. Assign the FIRST service to the CURRENT project
+			activeTarget = targets[0]
+			name = fmt.Sprintf("%s-%s", originalName, activeTarget.ServiceName)
+			imageName = fmt.Sprintf("%s-%s", originalImageName, activeTarget.ServiceName)
+			
+			db.Exec("UPDATE projects SET name = ?, image_name = ?, service_name = ? WHERE id = ?", name, imageName, activeTarget.ServiceName, projectID)
+
+			// B. Spawn BRAND NEW projects in the DB for the remaining services
+			for i := 1; i < len(targets); i++ {
+				t := targets[i]
+				tName := fmt.Sprintf("%s-%s", originalName, t.ServiceName)
+				tImageName := fmt.Sprintf("%s-%s", originalImageName, t.ServiceName)
+
+				res, err := db.Exec(`
+					INSERT INTO projects (name, repo_url, branch, image_name, custom_tags, registry_override, service_name, enabled) 
+					VALUES (?, ?, ?, ?, ?, ?, ?, 1)`,
+					tName, repoURL, branch, tImageName, customTagsStr, registryOverride, t.ServiceName)
+
+				// Fire off background builds for the newly created projects!
+				if err == nil {
+					newProjID, _ := res.LastInsertId()
+					go ExecuteBuild(db, cfg, int(newProjID)) 
+				}
+			}
+			BroadcastEvent("update") // Tell the UI about the new projects!
+		}
 	}
 
 	// Calculate Version
@@ -104,7 +149,6 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 	BroadcastEvent("update")
 
 	// Execute Build
-	log.Printf("[Project %d] Building %s context (%s)...", projectID, target.Type, target.File)
 	logDir := filepath.Join(cfg.DataDir, "logs", fmt.Sprintf("project_%d", projectID))
 	os.MkdirAll(logDir, os.ModePerm)
 	logsPath := filepath.Join(logDir, fmt.Sprintf("build_%d.log", buildID))
@@ -118,18 +162,21 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 
 	logFile.Write([]byte(fmt.Sprintf("Starting Shipper Build Pipeline for %s...\n", name)))
 	logFile.Write([]byte(fmt.Sprintf("Commit: %s | Target Version: %s\n", commitHash[:7], newVersion)))
+	if activeTarget.ServiceName != "" {
+		logFile.Write([]byte(fmt.Sprintf("Target Service: %s\n", activeTarget.ServiceName)))
+	}
 	logFile.Write([]byte("---------------------------------------------------\n"))
 
-	// Execute Build (Pass the logFile stream)
-	log.Printf("[Project %d] Building %s context (%s)...", projectID, target.Type, target.File)
-	buildErr := RunBuildx(workDir, target.Dockerfile, target.Context, tags, true, logFile)
+	// Pass the context (like ./backend) to RunBuildx
+	log.Printf("[Project %d] Building %s context (%s)...", projectID, activeTarget.Type, activeTarget.File)
+	buildErr := RunBuildx(workDir, activeTarget.Dockerfile, activeTarget.Context, tags, true, logFile)
 	
 	logFile.Close()
 
+	// ... [THE REST OF FINALIZE REMAINS EXACTLY THE SAME] ...
 	status := "success"
 	if buildErr != nil {
 		status = "failed"
-		// SAFELY APPEND the error instead of truncating!
 		f, _ := os.OpenFile(logsPath, os.O_APPEND|os.O_WRONLY, 0666)
 		if f != nil {
 			f.Write([]byte(fmt.Sprintf("\n\n--- SYSTEM ERROR ---\n%v\n", buildErr)))
@@ -138,10 +185,8 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 	} else {
 		updateState(db, projectID, newVersion, commitHash)
 		db.Exec("UPDATE state SET next_bump = 'patch' WHERE project_id = ?", projectID)
-
 		db.Exec("DELETE FROM tags WHERE tag = 'latest' AND build_id IN (SELECT id FROM builds WHERE project_id = ?)", projectID)
 
-		// Save tags to DB so they show up in UI
 		for _, fullTag := range tags {
 			parts := strings.Split(fullTag, ":")
 			if len(parts) >= 2 {
@@ -153,8 +198,7 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int) error {
 	recordBuildFinish(db, buildID, status)
 	BroadcastEvent("update")
 
-	if status == "success"{
-		// Run retention policy asynchronously
+	if status == "success" {
 		go func() {
 			allVersions := fetchAllVersions(db, projectID)
 			ApplyRetentionPolicy(db, projectID, cfg.RegistryURL, imageName, allVersions, settings.RetentionPolicy)

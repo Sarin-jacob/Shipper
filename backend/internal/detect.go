@@ -26,25 +26,30 @@ type ComposeSchema struct {
 }
 
 // AnalyzeRepo searches a directory for build configurations based on priority
-func AnalyzeRepo(repoPath string) (*BuildTarget, error) {
+func AnalyzeRepo(repoPath string) ([]BuildTarget, error) {
 	composeFiles := []string{"docker-compose.yml", "compose.yml", "docker-compose.yaml"}
 
 	// 1. Check for Compose files first
 	for _, file := range composeFiles {
 		fullPath := filepath.Join(repoPath, file)
 		if _, err := os.Stat(fullPath); err == nil {
-			return parseCompose(fullPath, file)
+			targets, err := parseCompose(fullPath, file)
+			if err == nil && len(targets) > 0 {
+				return targets, nil
+			}
 		}
 	}
 
 	// 2. Fallback to standalone Dockerfile
 	dockerfilePath := filepath.Join(repoPath, "Dockerfile")
 	if _, err := os.Stat(dockerfilePath); err == nil {
-		return &BuildTarget{
-			Type:       "dockerfile",
-			File:       "Dockerfile",
-			Context:    ".",
-			Dockerfile: "Dockerfile",
+		return []BuildTarget{
+			{
+				Type:       "dockerfile",
+				File:       "Dockerfile",
+				Context:    ".",
+				Dockerfile: "Dockerfile",
+			},
 		}, nil
 	}
 
@@ -52,7 +57,7 @@ func AnalyzeRepo(repoPath string) (*BuildTarget, error) {
 }
 
 // parseCompose extracts build context and dockerfile from a compose service
-func parseCompose(fullPath, fileName string) (*BuildTarget, error) {
+func parseCompose(fullPath, fileName string) ([]BuildTarget, error) {
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		return nil, err
@@ -63,13 +68,15 @@ func parseCompose(fullPath, fileName string) (*BuildTarget, error) {
 		return nil, fmt.Errorf("failed to parse compose file: %v", err)
 	}
 
-	// Find the first service that has a "build" directive
+	var targets []BuildTarget
+
+	// Loop through ALL services and collect every valid build directive
 	for serviceName, service := range compose.Services {
 		if service.Build.IsZero() {
 			continue
 		}
 
-		target := &BuildTarget{
+		target := BuildTarget{
 			Type:        "compose",
 			File:        fileName,
 			ServiceName: serviceName,
@@ -80,7 +87,8 @@ func parseCompose(fullPath, fileName string) (*BuildTarget, error) {
 		// Handle string build context: `build: .`
 		if service.Build.Kind == yaml.ScalarNode {
 			target.Context = service.Build.Value
-			return target, nil
+			targets = append(targets, target)
+			continue
 		}
 
 		// Handle object build context
@@ -97,9 +105,14 @@ func parseCompose(fullPath, fileName string) (*BuildTarget, error) {
 			if buildObj.Dockerfile != "" {
 				target.Dockerfile = buildObj.Dockerfile
 			}
-			return target, nil
+			targets = append(targets, target)
+			continue
 		}
 	}
 
-	return nil, fmt.Errorf("found compose file but no build directives inside")
+	if len(targets) == 0 {
+		return nil, fmt.Errorf("found compose file but no build directives inside")
+	}
+
+	return targets, nil
 }
