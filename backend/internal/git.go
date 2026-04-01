@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
 // CloneRepo performs a shallow clone of the target branch into destPath
-func CloneRepo(repoURL, branch, destPath, ghToken string) error {
+func CloneRepo(repoURL, branch, destPath, ghToken, dataDir string) error {
 	// Inject the token safely
 	repoURL = InjectGHToken(repoURL, ghToken)
 
@@ -21,6 +22,22 @@ func CloneRepo(repoURL, branch, destPath, ghToken string) error {
 		return fmt.Errorf("git clone failed: %v\nOutput: %s", err, string(output))
 	}
 	
+	lfsCacheDir := filepath.Join(dataDir, "lfs_cache")
+	os.MkdirAll(lfsCacheDir, os.ModePerm)
+
+	configCmd := exec.Command("git", "config", "lfs.storage", lfsCacheDir)
+	configCmd.Dir = destPath // Execute inside the cloned repo
+	if output, err := configCmd.CombinedOutput(); err != nil {
+		fmt.Printf("Warning: failed to set LFS storage path: %v\nOutput: %s", err, string(output))
+	}
+
+	lfsCmd := exec.Command("git", "lfs", "pull")
+	lfsCmd.Dir = destPath
+	lfsCmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	if output, err := lfsCmd.CombinedOutput(); err != nil {
+		fmt.Printf("Warning: 'git lfs pull' failed: %v\nOutput: %s", err, string(output))
+	}
+
 	return nil
 }
 

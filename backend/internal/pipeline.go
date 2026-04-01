@@ -51,7 +51,7 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int, isManual bool, noCache 
 	}
 	defer os.RemoveAll(workDir)
 
-	if err := CloneRepo(repoURL, branch, workDir, settings.GHToken); err != nil {
+	if err := CloneRepo(repoURL, branch, workDir, settings.GHToken, cfg.DataDir); err != nil {
 		return err
 	}
 

@@ -33,7 +33,7 @@ RUN CGO_ENABLED=1 GOOS=linux go build -o shipper cmd/shipper/main.go
 FROM alpine:latest
 
 # Install runtime dependencies: Git (for cloning) and Docker CLI (for buildx)
-RUN apk add --no-cache git docker-cli docker-cli-buildx tzdata
+RUN apk add --no-cache git docker-cli docker-cli-buildx tzdata git-lfs && git lfs install
 
 WORKDIR /app
 
