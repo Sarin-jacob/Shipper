@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
-	"time"
 	"strings"
 	"sync"
+	"time"
 )
 
 var buildLocks sync.Map
@@ -173,8 +174,18 @@ func ExecuteBuild(db *sql.DB, cfg Config, projectID int, isManual bool, noCache 
 	// Pass the context (like ./backend) to RunBuildx
 	log.Printf("[Project %d] Building %s context (%s)...", projectID, activeTarget.Type, activeTarget.File)
 	buildErr := RunBuildx(workDir, activeTarget.Dockerfile, activeTarget.Context, tags, true, noCache, logFile)
-	
 	logFile.Close()
+
+	if buildErr == nil {
+		go func(cleanupTags []string) {
+			for _, t := range cleanupTags {
+				cmd := exec.Command("docker", "rmi", t)
+				if err := cmd.Run(); err != nil {
+					log.Printf("Note: Failed to remove local image cache %s: %v", t, err)
+				}
+			}
+		}(tags)
+	}
 
 	// ... [THE REST OF FINALIZE REMAINS EXACTLY THE SAME] ...
 	status := "success"
