@@ -6,6 +6,7 @@ import (
 	"io"
 	"os/exec"
 	"strings"
+	"path/filepath"
 )
 
 // RunBuildx executes the Docker buildx command in the specified directory
