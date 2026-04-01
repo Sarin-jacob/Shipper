@@ -7,7 +7,32 @@ import (
 	"os/exec"
 	"strings"
 	"database/sql"
+	"strconv"
 )
+
+// compareVersions returns true if v1 is strictly numerically greater than v2
+func compareVersions(v1, v2 string) bool {
+	p1 := strings.Split(v1, ".")
+	p2 := strings.Split(v2, ".")
+
+	for i := range 3 {
+		n1 := 0
+		if i < len(p1) {
+			n1, _ = strconv.Atoi(p1[i])
+		}
+		n2 := 0
+		if i < len(p2) {
+			n2, _ = strconv.Atoi(p2[i])
+		}
+
+		if n1 > n2 {
+			return true
+		} else if n1 < n2 {
+			return false
+		}
+	}
+	return false
+}
 
 // ApplyRetentionPolicy keeps 'latest' and the highest patch of each minor version
 func ApplyRetentionPolicy(db *sql.DB, projectID int, registryURL, repository string, currentVersions []string, policy string) error {
@@ -29,7 +54,7 @@ func ApplyRetentionPolicy(db *sql.DB, projectID int, registryURL, repository str
 		if len(parts) >= 2 {
 			minorGroup := parts[0] + "." + parts[1]
 			currentHighest, exists := highestPatches[minorGroup]
-			if !exists || v > currentHighest {
+			if !exists || compareVersions(v, currentHighest) {
 				highestPatches[minorGroup] = v
 			}
 		}
