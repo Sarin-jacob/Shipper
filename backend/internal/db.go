@@ -83,6 +83,14 @@ func InitDB(dbPath string) (*sql.DB, error) {
 	_, _ = db.Exec("ALTER TABLE projects ADD COLUMN custom_tags TEXT DEFAULT ''")
 	db.Exec("ALTER TABLE state ADD COLUMN next_bump TEXT DEFAULT 'patch'")
 	db.Exec("ALTER TABLE projects ADD COLUMN registry_override TEXT DEFAULT ''")
+	
+	res, err := db.Exec("UPDATE builds SET status = 'failed' WHERE status = 'building'")
+	if err == nil {
+		rowsAffected, _ := res.RowsAffected()
+		if rowsAffected > 0 {
+			log.Printf("Cleaned up %d ghost builds from previous server crash.", rowsAffected)
+		}
+	}
 
 	log.Println("SQLite database initialized.")
 	return db, nil
