@@ -2,15 +2,17 @@
 package internal
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os/exec"
-	"strings"
 	"path/filepath"
+	"strings"
+	"time"
 )
 
 // RunBuildx executes the Docker buildx command in the specified directory
-func RunBuildx(workDir, dockerfile, context string, tags []string, push bool, noCache bool, out io.Writer) error {
+func RunBuildx(workDir, dockerfile, buildcontext string, tags []string, push bool, noCache bool, out io.Writer) error {
 	args := []string{"buildx", "build"}
 	args = append(args, "--progress=plain")
 
@@ -31,13 +33,16 @@ func RunBuildx(workDir, dockerfile, context string, tags []string, push bool, no
 		args = append(args, "--push")
 	}
 
-	if context == "" {
-		context = "."
+	if buildcontext == "" {
+		buildcontext = "."
 	}
-	args = append(args, context)
+	args = append(args, buildcontext)
 
 	cmdString := fmt.Sprintf("docker %s\n", strings.Join(args, " "))
 	out.Write([]byte(fmt.Sprintf("\nEXEC: %s\n", cmdString)))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
 
 	cmd := exec.Command("docker", args...)
 	cmd.Dir = workDir
@@ -45,6 +50,9 @@ func RunBuildx(workDir, dockerfile, context string, tags []string, push bool, no
 	cmd.Stderr = out
 
 	if err := cmd.Run(); err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("build timed out after 30 minutes")
+		}
 		return fmt.Errorf("build failed: %v", err)
 	}
 
